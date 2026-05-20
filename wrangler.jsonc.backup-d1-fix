@@ -1,0 +1,29 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"main": ".open-next/worker.js",
+	"name": "agentwing-live-lab",
+	"compatibility_date": "2026-05-16",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"d1_databases": [
+		{
+			"binding": "AGENTWING_DB",
+			"database_name": "agentwing-live-lab",
+			"database_id": "00000000-0000-0000-0000-000000000000"
+		},
+		{
+			"binding": "AGENTWING_DB",
+			"database_name": "agentwing_v1",
+			"database_id": "b146a8aa-141a-41bb-a70b-fe939832acd6"
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+}

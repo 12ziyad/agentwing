@@ -1,0 +1,9 @@
+export const runtime = "nodejs";
+
+export async function POST() {
+  return Response.json({
+    ok: true,
+    accessRequired: false,
+    disabled: true,
+  });
+}

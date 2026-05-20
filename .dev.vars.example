@@ -1,0 +1,5 @@
+E2B_API_KEY=e2b_your_key_here
+OPENAI_API_KEY=sk_your_key_here
+OPENAI_MODEL=gpt-4.1-mini
+DEMO_ACCESS_CODE=AGENTWING-BETA
+NEXTJS_ENV=development
