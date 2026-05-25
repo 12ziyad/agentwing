@@ -1,8 +1,11 @@
 import { saveE2BKey } from "@/lib/agentwingStore";
+import { adminRequiredResponse, isAdminRequest } from "@/lib/adminAccess";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+
   let body: unknown;
 
   try {

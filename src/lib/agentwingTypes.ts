@@ -104,3 +104,25 @@ export type AgentWingApiKeyRecord = {
   createdAt: string;
   lastUsedAt?: string;
 };
+
+export type SandboxMode = "none" | "e2b_byok" | "custom_http" | "managed_soon";
+
+export type SandboxTestStatus = "success" | "failed";
+
+export type SandboxProviderConfig = {
+  provider: "e2b-byok";
+  connected: boolean;
+  mode: SandboxMode;
+  byok: boolean;
+  sandboxMode: "BYOK" | "none";
+  keyPrefix?: string;
+  keyLast4?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastTestStatus?: SandboxTestStatus;
+  lastTestedAt?: string;
+  runtimeExecutionEnabled: boolean;
+  e2bKeySaved: boolean;
+  e2bKeyLast4?: string;
+  e2bKeyUpdatedAt?: string;
+};

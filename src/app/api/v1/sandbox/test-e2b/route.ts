@@ -1,26 +1,77 @@
-import { getE2BApiKeyForExecution, getSandboxConfig } from "@/lib/agentwingStore";
+import { adminRequiredResponse, isAdminRequest } from "@/lib/adminAccess";
+import { getE2BApiKeyForExecution, getSandboxConfig, recordE2BTestResult } from "@/lib/agentwingStore";
+import type { AgentAction } from "@/lib/agentwingTypes";
+import { runE2BSandbox } from "@/lib/sandbox/providers/e2b";
 
 export const runtime = "nodejs";
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+
   const [apiKey, sandbox] = await Promise.all([getE2BApiKeyForExecution(), getSandboxConfig()]);
 
-  if (!apiKey) {
+  if (!apiKey || !sandbox.connected) {
+    const nextSandbox = await recordE2BTestResult("failed");
     return Response.json(
       {
         ok: false,
         provider: "e2b-byok",
-        sandbox,
+        sandbox: nextSandbox,
         message: "No E2B API key is saved server-side. Save a BYOK key first.",
       },
       { status: 400 },
     );
   }
 
-  return Response.json({
-    ok: true,
-    provider: "e2b-byok",
-    sandbox,
-    message: "E2B BYOK configuration is present server-side. Runtime sandbox execution is enabled.",
-  });
+  const action: AgentAction = {
+    projectId: "runtime-lab",
+    sessionId: "e2b-provider-test",
+    agentId: "agentwing-dashboard",
+    actionType: "shell_command",
+    tool: "terminal",
+    target: "e2b sandbox",
+    command: "node -e \"console.log('agentwing-e2b-ok')\"",
+    description: "Test E2B BYOK sandbox connection",
+  };
+
+  try {
+    const result = await runE2BSandbox({
+      apiKey,
+      command: action.command!,
+      action,
+      projectId: action.projectId,
+      sessionId: action.sessionId,
+    });
+    const nextSandbox = await recordE2BTestResult(result.exitCode === 0 ? "success" : "failed");
+
+    if (result.exitCode !== 0 || result.error) {
+      return Response.json(
+        {
+          ok: false,
+          provider: "e2b-byok",
+          sandbox: nextSandbox,
+          message: result.error ?? "E2B test command completed with a non-zero exit code.",
+        },
+        { status: 502 },
+      );
+    }
+
+    return Response.json({
+      ok: true,
+      provider: "e2b-byok",
+      sandbox: nextSandbox,
+      message: "E2B BYOK connection test succeeded. Runtime sandbox execution is enabled.",
+    });
+  } catch (error) {
+    const nextSandbox = await recordE2BTestResult("failed");
+    return Response.json(
+      {
+        ok: false,
+        provider: "e2b-byok",
+        sandbox: nextSandbox,
+        message: error instanceof Error ? error.message : "E2B connection test failed.",
+      },
+      { status: 502 },
+    );
+  }
 }

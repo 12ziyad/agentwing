@@ -7,15 +7,11 @@ import type {
   ApiKeyUsage,
   PolicyEvaluation,
   ReceiptStats,
+  SandboxProviderConfig,
+  SandboxTestStatus,
 } from "./agentwingTypes";
 
-type SandboxMode = "none" | "e2b_byok" | "custom_http" | "managed_soon";
-
-type SandboxConfig = {
-  mode: SandboxMode;
-  e2bKeySaved: boolean;
-  e2bKeyLast4?: string;
-  e2bKeyUpdatedAt?: string;
+type SandboxConfig = SandboxProviderConfig & {
   e2bApiKey?: string;
 };
 
@@ -92,11 +88,15 @@ type ApiKeyRow = {
 };
 
 type SandboxRow = {
-  mode: SandboxMode;
+  mode: SandboxProviderConfig["mode"];
   e2b_key_saved: number;
+  e2b_key_prefix?: string | null;
   e2b_key_last4?: string | null;
   e2b_key_encrypted?: string | null;
+  connected_at?: string | null;
   updated_at?: string | null;
+  last_test_status?: string | null;
+  last_tested_at?: string | null;
 };
 
 const STORE_SYMBOL = Symbol.for("agentwing.dev.store");
@@ -131,7 +131,12 @@ function getState(): StoreState {
     globalStore[STORE_SYMBOL] = {
       receipts: [],
       sandbox: {
+        provider: "e2b-byok",
+        connected: false,
         mode: "none",
+        byok: true,
+        sandboxMode: "none",
+        runtimeExecutionEnabled: false,
         e2bKeySaved: false,
       },
       usageByApiKey: {
@@ -324,6 +329,57 @@ function mapApiKeyRow(row: ApiKeyRow): AgentWingApiKeyRecord {
     sandboxRunLimit: row.sandbox_run_limit,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at ?? undefined,
+  };
+}
+
+function normalizeStoredE2BKey(apiKey: string) {
+  let normalized = apiKey.trim().replace(/^['"]|['"]$/g, "");
+
+  for (const pattern of [
+    /^authorization\s*:\s*bearer\s+/i,
+    /^authorization\s*=\s*bearer\s+/i,
+    /^bearer\s+/i,
+    /^x-api-key\s*:\s*/i,
+    /^x-api-key\s*=\s*/i,
+    /^e2b_api_key\s*=\s*/i,
+  ]) {
+    normalized = normalized.replace(pattern, "").trim().replace(/^['"]|['"]$/g, "");
+  }
+
+  return normalized;
+}
+
+function safeE2BKeyPrefix(apiKey: string) {
+  return apiKey.toLowerCase().startsWith("e2b_") ? "e2b_" : undefined;
+}
+
+function isPlaceholderE2BKey(apiKey: string) {
+  return /^(paste_your_|e2b_your_key_here|your_e2b_api_key)/i.test(apiKey);
+}
+
+function publicSandboxConfig(row?: Partial<SandboxRow> | null): SandboxProviderConfig {
+  const connected = Boolean(row?.e2b_key_saved && row.mode === "e2b_byok");
+  const lastTestStatus =
+    row?.last_test_status === "success" || row?.last_test_status === "failed"
+      ? row.last_test_status
+      : undefined;
+
+  return {
+    provider: "e2b-byok",
+    connected,
+    mode: row?.mode ?? "none",
+    byok: true,
+    sandboxMode: connected ? "BYOK" : "none",
+    keyPrefix: row?.e2b_key_prefix ?? undefined,
+    keyLast4: row?.e2b_key_last4 ?? undefined,
+    createdAt: row?.connected_at ?? undefined,
+    updatedAt: row?.updated_at ?? undefined,
+    lastTestStatus,
+    lastTestedAt: row?.last_tested_at ?? undefined,
+    runtimeExecutionEnabled: connected,
+    e2bKeySaved: connected,
+    e2bKeyLast4: row?.e2b_key_last4 ?? undefined,
+    e2bKeyUpdatedAt: row?.updated_at ?? undefined,
   };
 }
 
@@ -904,15 +960,15 @@ export async function getSandboxConfig(apiKeyId = DEMO_API_KEY) {
     try {
       await ensureD1DemoKey(db);
       const row = await db
-        .prepare("SELECT mode, e2b_key_saved, e2b_key_last4, updated_at FROM sandbox_configs WHERE api_key = ?")
+        .prepare(
+          `SELECT mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4,
+                  connected_at, updated_at, last_test_status, last_tested_at
+           FROM sandbox_configs
+           WHERE api_key = ?`,
+        )
         .bind(apiKeyId)
         .first<SandboxRow>();
-      return {
-        mode: row?.mode ?? "none",
-        e2bKeySaved: Boolean(row?.e2b_key_saved),
-        e2bKeyLast4: row?.e2b_key_last4 ?? undefined,
-        e2bKeyUpdatedAt: row?.updated_at ?? undefined,
-      };
+      return publicSandboxConfig(row);
     } catch (error) {
       warnD1Fallback("getSandboxConfig", error);
       // Fall back to memory if D1 has not been migrated yet.
@@ -925,9 +981,15 @@ export async function getSandboxConfig(apiKeyId = DEMO_API_KEY) {
 }
 
 export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
-  const trimmed = apiKey.trim();
+  const trimmed = normalizeStoredE2BKey(apiKey);
   if (!trimmed) {
     throw new Error("E2B API key is required.");
+  }
+  if (isPlaceholderE2BKey(trimmed)) {
+    throw new Error("Replace the placeholder with a real E2B API key before saving.");
+  }
+  if (/\s/.test(trimmed)) {
+    throw new Error("Save the raw E2B API key without Authorization, Bearer, or header prefixes.");
   }
 
   const db = await getDb();
@@ -937,16 +999,18 @@ export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
       await db
         .prepare(
           `INSERT INTO sandbox_configs
-           (api_key, mode, e2b_key_saved, e2b_key_last4, e2b_key_encrypted, updated_at)
-           VALUES (?, 'e2b_byok', 1, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           (api_key, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
+           VALUES (?, 'e2b_byok', 1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
            ON CONFLICT(api_key) DO UPDATE SET
              mode = 'e2b_byok',
              e2b_key_saved = 1,
+             e2b_key_prefix = excluded.e2b_key_prefix,
              e2b_key_last4 = excluded.e2b_key_last4,
              e2b_key_encrypted = excluded.e2b_key_encrypted,
+             connected_at = COALESCE(sandbox_configs.connected_at, excluded.connected_at),
              updated_at = excluded.updated_at`,
         )
-        .bind(ownerApiKeyId, trimmed.slice(-4), await encryptSandboxSecret(trimmed))
+        .bind(ownerApiKeyId, safeE2BKeyPrefix(trimmed) ?? null, trimmed.slice(-4), await encryptSandboxSecret(trimmed))
         .run();
 
       return getSandboxConfig(ownerApiKeyId);
@@ -959,11 +1023,103 @@ export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
   const state = getState();
   state.sandbox = {
     ...state.sandbox,
+    provider: "e2b-byok",
+    connected: true,
     mode: "e2b_byok",
+    byok: true,
+    sandboxMode: "BYOK",
     e2bApiKey: trimmed,
+    keyPrefix: safeE2BKeyPrefix(trimmed),
+    keyLast4: trimmed.slice(-4),
+    createdAt: state.sandbox.createdAt ?? nowIso(),
+    updatedAt: nowIso(),
+    runtimeExecutionEnabled: true,
     e2bKeySaved: true,
     e2bKeyLast4: trimmed.slice(-4),
     e2bKeyUpdatedAt: nowIso(),
+  };
+
+  return getSandboxConfig(ownerApiKeyId);
+}
+
+export async function recordE2BTestResult(status: SandboxTestStatus, ownerApiKeyId = DEMO_API_KEY) {
+  const db = await getDb();
+  if (db) {
+    try {
+      await ensureD1DemoKey(db);
+      await db
+        .prepare(
+          `INSERT INTO sandbox_configs
+           (api_key, mode, e2b_key_saved, last_test_status, last_tested_at)
+           VALUES (?, 'none', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           ON CONFLICT(api_key) DO UPDATE SET
+             last_test_status = excluded.last_test_status,
+             last_tested_at = excluded.last_tested_at`,
+        )
+        .bind(ownerApiKeyId, status)
+        .run();
+
+      return getSandboxConfig(ownerApiKeyId);
+    } catch (error) {
+      warnD1Fallback("recordE2BTestResult", error);
+      // Fall back to memory if D1 has not been migrated yet.
+    }
+  }
+
+  const state = getState();
+  const testedAt = nowIso();
+  state.sandbox = {
+    ...state.sandbox,
+    lastTestStatus: status,
+    lastTestedAt: testedAt,
+  };
+
+  return getSandboxConfig(ownerApiKeyId);
+}
+
+export async function removeE2BKey(ownerApiKeyId = DEMO_API_KEY) {
+  const db = await getDb();
+  if (db) {
+    try {
+      await ensureD1DemoKey(db);
+      await db
+        .prepare(
+          `INSERT INTO sandbox_configs
+           (api_key, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
+           VALUES (?, 'none', 0, NULL, NULL, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           ON CONFLICT(api_key) DO UPDATE SET
+             mode = 'none',
+             e2b_key_saved = 0,
+             e2b_key_prefix = NULL,
+             e2b_key_last4 = NULL,
+             e2b_key_encrypted = NULL,
+             connected_at = NULL,
+             last_test_status = NULL,
+             last_tested_at = NULL,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(ownerApiKeyId)
+        .run();
+
+      return getSandboxConfig(ownerApiKeyId);
+    } catch (error) {
+      warnD1Fallback("removeE2BKey", error);
+      // Fall back to memory if D1 has not been migrated yet.
+    }
+  }
+
+  const state = getState();
+  const updatedAt = nowIso();
+  state.sandbox = {
+    provider: "e2b-byok",
+    connected: false,
+    mode: "none",
+    byok: true,
+    sandboxMode: "none",
+    runtimeExecutionEnabled: false,
+    e2bKeySaved: false,
+    updatedAt,
+    e2bKeyUpdatedAt: updatedAt,
   };
 
   return getSandboxConfig(ownerApiKeyId);
@@ -988,6 +1144,8 @@ async function getD1E2BApiKey(db: AgentWingD1Database, apiKeyId: string) {
 
 export async function getE2BApiKeyForExecution(apiKeyId = DEMO_API_KEY) {
   const db = await getDb();
+  let useMemoryFallback = !db;
+
   if (db) {
     try {
       await ensureD1DemoKey(db);
@@ -1000,13 +1158,16 @@ export async function getE2BApiKeyForExecution(apiKeyId = DEMO_API_KEY) {
       }
     } catch (error) {
       warnD1Fallback("getE2BApiKeyForExecution", error);
+      useMemoryFallback = true;
       // Fall back to memory/env in local development if D1 is not ready.
     }
   }
 
-  const devStoredKey = getState().sandbox.e2bApiKey?.trim();
-  if (devStoredKey) return devStoredKey;
+  if (useMemoryFallback) {
+    const devStoredKey = getState().sandbox.e2bApiKey?.trim();
+    if (devStoredKey && !isPlaceholderE2BKey(devStoredKey)) return devStoredKey;
+  }
 
   const envKey = process.env.E2B_API_KEY?.trim();
-  return envKey || undefined;
+  return envKey && !isPlaceholderE2BKey(envKey) ? envKey : undefined;
 }

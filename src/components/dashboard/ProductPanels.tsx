@@ -1,13 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Copy, Database, KeyRound, Play, Plus, Save, Shield, ToggleLeft, ToggleRight } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  Database,
+  KeyRound,
+  Play,
+  Plus,
+  RefreshCw,
+  Save,
+  Shield,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+} from "lucide-react";
 import type {
   ActionReceipt,
   AgentWingApiKeyRecord,
   AgentWingProject,
   ApiKeyUsage,
   ReceiptStats,
+  SandboxProviderConfig,
 } from "@/lib/agentwingTypes";
 
 const defaultStats: ReceiptStats = {
@@ -47,15 +62,40 @@ const decisionClass: Record<string, string> = {
   restore_point_required: "border-violet-300/25 bg-violet-300/[0.08] text-violet-100",
 };
 
-type SandboxConfig = {
-  mode: "none" | "e2b_byok" | "custom_http" | "managed_soon";
-  e2bKeySaved: boolean;
-  e2bKeyLast4?: string;
-  e2bKeyUpdatedAt?: string;
+type SandboxConfig = SandboxProviderConfig;
+
+const emptySandboxConfig: SandboxConfig = {
+  provider: "e2b-byok",
+  connected: false,
+  mode: "none",
+  byok: true,
+  sandboxMode: "none",
+  runtimeExecutionEnabled: false,
+  e2bKeySaved: false,
 };
 
 function cardClass() {
   return "rounded-md border border-white/[0.08] bg-[#080b12] p-5";
+}
+
+function formatDate(value?: string) {
+  return value ? new Date(value).toLocaleString() : "Not available";
+}
+
+function maskedSandboxKey(config: SandboxConfig) {
+  const last4 = config.keyLast4 ?? config.e2bKeyLast4;
+  if (!last4) return "Saved server-side";
+  return `${config.keyPrefix ?? ""}••••${last4}`;
+}
+
+function statusPillClass(kind: "connected" | "empty" | "success" | "failed") {
+  const classes = {
+    connected: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
+    empty: "border-slate-300/15 bg-slate-300/[0.06] text-slate-300",
+    success: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
+    failed: "border-amber-300/25 bg-amber-300/[0.08] text-amber-100",
+  };
+  return `inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-semibold ${classes[kind]}`;
 }
 
 export function ApiKeysPanel() {
@@ -230,21 +270,29 @@ export function PoliciesPanel() {
 
 export function SandboxesPanel() {
   const [apiKey, setApiKey] = useState("");
-  const [config, setConfig] = useState<SandboxConfig>({ mode: "none", e2bKeySaved: false });
-  const [status, setStatus] = useState("Sandbox configuration is loaded from server-side storage.");
-  const [lastTest, setLastTest] = useState<{ ok: boolean; at: string; message: string } | undefined>();
+  const [config, setConfig] = useState<SandboxConfig>(emptySandboxConfig);
+  const [status, setStatus] = useState("Loading sandbox provider configuration...");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isReplacing, setIsReplacing] = useState(false);
 
   useEffect(() => {
     fetch("/api/v1/sandbox/config")
       .then((response) => response.json())
       .then((data: { sandbox?: SandboxConfig }) => {
         if (data.sandbox) setConfig(data.sandbox);
+        setStatus("Sandbox provider metadata loaded.");
       })
-      .catch(() => setStatus("Unable to load sandbox configuration."));
+      .catch(() => setStatus("Unable to load sandbox configuration."))
+      .finally(() => setLoading(false));
   }, []);
 
   async function saveKey() {
+    if (!apiKey.trim()) {
+      setStatus("Paste an E2B API key before saving.");
+      return;
+    }
+
     setBusy(true);
     try {
       const response = await fetch("/api/v1/sandbox/save-e2b", {
@@ -256,7 +304,8 @@ export function SandboxesPanel() {
       if (!response.ok || !data.ok) throw new Error(data.error ?? "Unable to save E2B key.");
       setApiKey("");
       if (data.sandbox) setConfig(data.sandbox);
-      setStatus(data.sandbox?.e2bKeySaved ? "Connected. E2B BYOK key is stored server-side only." : "Not connected.");
+      setIsReplacing(false);
+      setStatus("Connected. E2B BYOK key is stored server-side only.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to save E2B key.");
     } finally {
@@ -268,15 +317,39 @@ export function SandboxesPanel() {
     setBusy(true);
     try {
       const response = await fetch("/api/v1/sandbox/test-e2b", { method: "POST" });
-      const data = (await response.json()) as { message?: string; sandbox?: SandboxConfig };
+      const data = (await response.json()) as { ok?: boolean; message?: string; sandbox?: SandboxConfig };
       if (data.sandbox) setConfig(data.sandbox);
       const message = data.message ?? (response.ok ? "E2B configuration is present." : "E2B test failed.");
-      setLastTest({ ok: response.ok, at: new Date().toISOString(), message });
       setStatus(message);
+    } catch {
+      setStatus("Unable to test E2B connection.");
     } finally {
       setBusy(false);
     }
   }
+
+  async function removeKey() {
+    if (!window.confirm("Remove the saved E2B BYOK key from server-side storage?")) return;
+
+    setBusy(true);
+    try {
+      const response = await fetch("/api/v1/sandbox/config", { method: "DELETE" });
+      const data = (await response.json()) as { ok?: boolean; sandbox?: SandboxConfig; error?: string; message?: string };
+      if (!response.ok || !data.ok) throw new Error(data.error ?? "Unable to remove E2B key.");
+      setConfig(data.sandbox ?? emptySandboxConfig);
+      setApiKey("");
+      setIsReplacing(false);
+      setStatus(data.message ?? "E2B BYOK key removed.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to remove E2B key.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const connected = config.connected || config.e2bKeySaved;
+  const showSetup = !connected || isReplacing;
+  const lastTestKind = config.lastTestStatus === "success" ? "success" : config.lastTestStatus === "failed" ? "failed" : "empty";
 
   return (
     <div className="space-y-5">
@@ -284,82 +357,152 @@ export function SandboxesPanel() {
         title="Sandboxes"
         copy="Configure where AgentWing routes actions that require isolated execution. Secrets stay server-side only."
       />
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {["None", "E2B BYOK", "Custom HTTP Sandbox", "AgentWing Managed Sandbox: coming soon"].map((mode) => (
-          <div key={mode} className={cardClass()}>
-            <p className="text-sm font-semibold text-white">{mode}</p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              {mode === "E2B BYOK" ? "Use your own E2B key from server-side storage." : "Selectable routing mode for project policy."}
-            </p>
-          </div>
-        ))}
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <article className={cardClass()}>
+          <p className="text-xs font-medium text-slate-400">Connected sandbox providers</p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{connected ? 1 : 0}</p>
+          <p className="mt-2 text-xs text-slate-500">Runtime execution is {connected ? "enabled" : "waiting for a BYOK key"}.</p>
+        </article>
+        <article className={cardClass()}>
+          <p className="text-xs font-medium text-slate-400">Available providers</p>
+          <p className="mt-3 text-sm font-semibold text-white">E2B BYOK</p>
+          <p className="mt-2 text-xs text-slate-500">Server-side customer-owned sandbox credentials.</p>
+        </article>
+        <article className={cardClass()}>
+          <p className="text-xs font-medium text-slate-400">Coming soon</p>
+          <p className="mt-3 text-sm font-semibold text-white">Daytona, Cloudflare Sandbox, Custom HTTP Sandbox, Browserbase</p>
+          <p className="mt-2 text-xs text-slate-500">Additional providers will follow the same safe metadata model.</p>
+        </article>
       </div>
+
       <section className={cardClass()}>
-        <div className="mb-5 grid gap-3 md:grid-cols-4">
-          <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-3">
-            <p className="text-xs text-slate-500">Provider</p>
-            <p className="mt-2 text-sm font-semibold text-white">E2B BYOK</p>
-          </div>
-          <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-3">
-            <p className="text-xs text-slate-500">Status</p>
-            <p className={config.e2bKeySaved ? "mt-2 text-sm font-semibold text-emerald-100" : "mt-2 text-sm font-semibold text-slate-300"}>
-              {config.e2bKeySaved ? "Connected" : "Not connected"}
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.08] pb-5">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">E2B BYOK Sandbox</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+              Connect your own E2B API key. AgentWing uses this key server-side to run sandbox-required agent actions.
+              Your key is never shown again after saving.
             </p>
           </div>
-          <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-3">
-            <p className="text-xs text-slate-500">Key status</p>
-            <p className="mt-2 text-sm font-semibold text-white">
-              {config.e2bKeySaved ? `Saved server-side${config.e2bKeyLast4 ? `, last 4 ${config.e2bKeyLast4}` : ""}` : "No key saved"}
-            </p>
-          </div>
-          <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-3">
-            <p className="text-xs text-slate-500">Updated</p>
-            <p className="mt-2 text-sm font-semibold text-white">
-              {config.e2bKeyUpdatedAt ? new Date(config.e2bKeyUpdatedAt).toLocaleString() : "No update yet"}
-            </p>
-          </div>
+          {loading ? (
+            <span className={statusPillClass("empty")}>Loading</span>
+          ) : connected ? (
+            <span className={statusPillClass("connected")}>
+              <CheckCircle2 className="size-3.5" />
+              Connected
+            </span>
+          ) : (
+            <span className={statusPillClass("empty")}>Not connected</span>
+          )}
         </div>
-        <label htmlFor="e2b-key" className="text-sm font-semibold text-white">
-          E2B API key
-        </label>
-        <p className="mt-1 text-sm text-slate-400">
-          Stored server-side for AgentWing sandbox routing. The raw key is never returned after save.
-        </p>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input
-            id="e2b-key"
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder="Paste E2B BYOK key"
-            className="min-h-11 flex-1 rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={saveKey}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2 text-sm font-semibold text-[#031018] disabled:opacity-60"
-          >
-            <Save className="size-4" />
-            {config.e2bKeySaved ? "Replace key" : "Save"}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={testKey}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-slate-100 disabled:opacity-60"
-          >
-            <Play className="size-4" />
-            Test
-          </button>
-        </div>
-        <p className="mt-3 rounded-md border border-white/[0.08] bg-[#05070d] px-3 py-2 text-sm text-slate-300">{status}</p>
-        {lastTest && (
-          <p className={lastTest.ok ? "mt-3 text-xs text-emerald-100" : "mt-3 text-xs text-amber-100"}>
-            Last test {new Date(lastTest.at).toLocaleString()}: {lastTest.message}
-          </p>
+
+        {connected && (
+          <div className="mt-5 grid gap-x-6 gap-y-4 md:grid-cols-2">
+            <ProviderDetail label="Provider" value="E2B BYOK" />
+            <ProviderDetail label="Key" value={maskedSandboxKey(config)} mono />
+            <ProviderDetail label="Sandbox mode" value={config.sandboxMode === "BYOK" ? "BYOK" : "None"} />
+            <ProviderDetail label="Runtime execution" value={config.runtimeExecutionEnabled ? "Enabled" : "Disabled"} />
+            <ProviderDetail label="Created/updated" value={formatDate(config.updatedAt ?? config.e2bKeyUpdatedAt ?? config.createdAt)} />
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Last tested</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className={statusPillClass(lastTestKind)}>
+                  {config.lastTestStatus === "success" ? "Success" : config.lastTestStatus === "failed" ? "Failed" : "Not tested"}
+                </span>
+                {config.lastTestedAt && <span className="text-xs text-slate-500">{formatDate(config.lastTestedAt)}</span>}
+              </div>
+            </div>
+          </div>
         )}
+
+        {showSetup && (
+          <div className={connected ? "mt-5 border-t border-white/[0.08] pt-5" : "mt-5"}>
+            <label htmlFor="e2b-key" className="text-sm font-semibold text-white">
+              E2B API key
+            </label>
+            <p className="mt-1 text-sm text-slate-400">
+              Your API key is stored server-side and never returned to the browser.
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <input
+                id="e2b-key"
+                type="password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder="Paste E2B BYOK key"
+                className="min-h-11 flex-1 rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={saveKey}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2 text-sm font-semibold text-[#031018] disabled:opacity-60"
+              >
+                <Save className="size-4" />
+                Save key
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={testKey}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-slate-100 disabled:opacity-60"
+              >
+                <Play className="size-4" />
+                Test connection
+              </button>
+            </div>
+          </div>
+        )}
+
+        {connected && !showSetup && (
+          <div className="mt-5 flex flex-wrap gap-3 border-t border-white/[0.08] pt-5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={testKey}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-slate-100 disabled:opacity-60"
+            >
+              <Play className="size-4" />
+              Test
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setIsReplacing(true)}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-300/[0.08] px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-60"
+            >
+              <RefreshCw className="size-4" />
+              Replace key
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={removeKey}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-red-300/20 bg-red-400/[0.08] px-4 py-2 text-sm font-semibold text-red-100 disabled:opacity-60"
+            >
+              <Trash2 className="size-4" />
+              Remove key
+            </button>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-start gap-2 rounded-md border border-white/[0.08] bg-[#05070d] px-3 py-2 text-sm text-slate-300">
+          <AlertCircle className="mt-0.5 size-4 shrink-0 text-cyan-200" />
+          <p>{busy ? "Working..." : status}</p>
+        </div>
       </section>
+    </div>
+  );
+}
+
+function ProviderDetail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0 border-b border-white/[0.06] pb-3">
+      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className={mono ? "mt-2 break-all font-mono text-sm text-cyan-100" : "mt-2 text-sm font-semibold text-white"}>
+        {value}
+      </p>
     </div>
   );
 }
