@@ -47,6 +47,13 @@ const decisionClass: Record<string, string> = {
   restore_point_required: "border-violet-300/25 bg-violet-300/[0.08] text-violet-100",
 };
 
+type SandboxConfig = {
+  mode: "none" | "e2b_byok" | "custom_http" | "managed_soon";
+  e2bKeySaved: boolean;
+  e2bKeyLast4?: string;
+  e2bKeyUpdatedAt?: string;
+};
+
 function cardClass() {
   return "rounded-md border border-white/[0.08] bg-[#080b12] p-5";
 }
@@ -223,8 +230,19 @@ export function PoliciesPanel() {
 
 export function SandboxesPanel() {
   const [apiKey, setApiKey] = useState("");
-  const [status, setStatus] = useState("No BYOK key saved in this browser session.");
+  const [config, setConfig] = useState<SandboxConfig>({ mode: "none", e2bKeySaved: false });
+  const [status, setStatus] = useState("Sandbox configuration is loaded from server-side storage.");
+  const [lastTest, setLastTest] = useState<{ ok: boolean; at: string; message: string } | undefined>();
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/v1/sandbox/config")
+      .then((response) => response.json())
+      .then((data: { sandbox?: SandboxConfig }) => {
+        if (data.sandbox) setConfig(data.sandbox);
+      })
+      .catch(() => setStatus("Unable to load sandbox configuration."));
+  }, []);
 
   async function saveKey() {
     setBusy(true);
@@ -234,10 +252,11 @@ export function SandboxesPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey }),
       });
-      const data = (await response.json()) as { ok?: boolean; sandbox?: { e2bKeyLast4?: string }; error?: string };
+      const data = (await response.json()) as { ok?: boolean; sandbox?: SandboxConfig; error?: string };
       if (!response.ok || !data.ok) throw new Error(data.error ?? "Unable to save E2B key.");
       setApiKey("");
-      setStatus(`E2B key saved server-side. Last 4: ${data.sandbox?.e2bKeyLast4 ?? "hidden"}.`);
+      if (data.sandbox) setConfig(data.sandbox);
+      setStatus(data.sandbox?.e2bKeySaved ? "Connected. E2B BYOK key is stored server-side only." : "Not connected.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to save E2B key.");
     } finally {
@@ -249,8 +268,11 @@ export function SandboxesPanel() {
     setBusy(true);
     try {
       const response = await fetch("/api/v1/sandbox/test-e2b", { method: "POST" });
-      const data = (await response.json()) as { message?: string };
-      setStatus(data.message ?? (response.ok ? "E2B configuration is present." : "E2B test failed."));
+      const data = (await response.json()) as { message?: string; sandbox?: SandboxConfig };
+      if (data.sandbox) setConfig(data.sandbox);
+      const message = data.message ?? (response.ok ? "E2B configuration is present." : "E2B test failed.");
+      setLastTest({ ok: response.ok, at: new Date().toISOString(), message });
+      setStatus(message);
     } finally {
       setBusy(false);
     }
@@ -273,11 +295,35 @@ export function SandboxesPanel() {
         ))}
       </div>
       <section className={cardClass()}>
+        <div className="mb-5 grid gap-3 md:grid-cols-4">
+          <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-3">
+            <p className="text-xs text-slate-500">Provider</p>
+            <p className="mt-2 text-sm font-semibold text-white">E2B BYOK</p>
+          </div>
+          <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-3">
+            <p className="text-xs text-slate-500">Status</p>
+            <p className={config.e2bKeySaved ? "mt-2 text-sm font-semibold text-emerald-100" : "mt-2 text-sm font-semibold text-slate-300"}>
+              {config.e2bKeySaved ? "Connected" : "Not connected"}
+            </p>
+          </div>
+          <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-3">
+            <p className="text-xs text-slate-500">Key status</p>
+            <p className="mt-2 text-sm font-semibold text-white">
+              {config.e2bKeySaved ? `Saved server-side${config.e2bKeyLast4 ? `, last 4 ${config.e2bKeyLast4}` : ""}` : "No key saved"}
+            </p>
+          </div>
+          <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-3">
+            <p className="text-xs text-slate-500">Updated</p>
+            <p className="mt-2 text-sm font-semibold text-white">
+              {config.e2bKeyUpdatedAt ? new Date(config.e2bKeyUpdatedAt).toLocaleString() : "No update yet"}
+            </p>
+          </div>
+        </div>
         <label htmlFor="e2b-key" className="text-sm font-semibold text-white">
           E2B API key
         </label>
         <p className="mt-1 text-sm text-slate-400">
-          Stored in a dev-only process memory abstraction for now. The raw key is never returned after save.
+          Stored server-side for AgentWing sandbox routing. The raw key is never returned after save.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
           <input
@@ -295,7 +341,7 @@ export function SandboxesPanel() {
             className="inline-flex items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2 text-sm font-semibold text-[#031018] disabled:opacity-60"
           >
             <Save className="size-4" />
-            Save
+            {config.e2bKeySaved ? "Replace key" : "Save"}
           </button>
           <button
             type="button"
@@ -308,6 +354,11 @@ export function SandboxesPanel() {
           </button>
         </div>
         <p className="mt-3 rounded-md border border-white/[0.08] bg-[#05070d] px-3 py-2 text-sm text-slate-300">{status}</p>
+        {lastTest && (
+          <p className={lastTest.ok ? "mt-3 text-xs text-emerald-100" : "mt-3 text-xs text-amber-100"}>
+            Last test {new Date(lastTest.at).toLocaleString()}: {lastTest.message}
+          </p>
+        )}
       </section>
     </div>
   );

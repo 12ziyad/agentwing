@@ -1,0 +1,6 @@
+ALTER TABLE receipts ADD COLUMN mode TEXT;
+ALTER TABLE receipts ADD COLUMN stdout TEXT;
+ALTER TABLE receipts ADD COLUMN stderr TEXT;
+ALTER TABLE receipts ADD COLUMN exit_code INTEGER;
+ALTER TABLE receipts ADD COLUMN duration_ms INTEGER;
+ALTER TABLE receipts ADD COLUMN error TEXT;

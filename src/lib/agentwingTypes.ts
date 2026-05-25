@@ -39,6 +39,12 @@ export type PolicyEvaluation = {
   policy: string;
   feedback: string;
   provider?: string;
+  mode?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  durationMs?: number;
+  error?: string;
 };
 
 export type ActionReceipt = {
@@ -55,6 +61,12 @@ export type ActionReceipt = {
   policy: string;
   feedback: string;
   provider?: string;
+  mode?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  durationMs?: number;
+  error?: string;
   createdAt: string;
 };
 

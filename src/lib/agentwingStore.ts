@@ -54,6 +54,12 @@ type ReceiptRow = {
   policy: string;
   feedback: string;
   provider?: string | null;
+  mode?: string | null;
+  stdout?: string | null;
+  stderr?: string | null;
+  exit_code?: number | null;
+  duration_ms?: number | null;
+  error?: string | null;
   created_at: string;
 };
 
@@ -89,6 +95,7 @@ type SandboxRow = {
   mode: SandboxMode;
   e2b_key_saved: number;
   e2b_key_last4?: string | null;
+  e2b_key_encrypted?: string | null;
   updated_at?: string | null;
 };
 
@@ -183,6 +190,63 @@ async function sha256(value: string) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+async function importSandboxCryptoKey() {
+  const configuredSecret = process.env.AGENTWING_SANDBOX_SECRET ?? process.env.AGENTWING_SECRET_KEY;
+  const secret =
+    configuredSecret ||
+    (process.env.NODE_ENV === "production" ? undefined : "agentwing-dev-only-sandbox-secret");
+
+  if (!secret) {
+    throw new Error("Set AGENTWING_SANDBOX_SECRET to store usable BYOK sandbox credentials in D1.");
+  }
+
+  if (!configuredSecret && process.env.NODE_ENV !== "production") {
+    warnD1Fallback("sandbox-secret-dev-key", new Error("Using dev-only sandbox encryption key."));
+  }
+
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return globalThis.crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  return Buffer.from(bytes).toString("base64");
+}
+
+function base64ToBytes(value: string) {
+  return new Uint8Array(Buffer.from(value, "base64"));
+}
+
+async function encryptSandboxSecret(secret: string) {
+  // TODO: Rotate this to a Cloudflare Worker secret-derived key with versioned key IDs.
+  const key = await importSandboxCryptoKey();
+  const iv = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(iv);
+  const encrypted = await globalThis.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(secret),
+  );
+
+  return `awenc:v1:${bytesToBase64(iv)}:${bytesToBase64(new Uint8Array(encrypted))}`;
+}
+
+async function decryptSandboxSecret(encryptedSecret?: string | null) {
+  if (!encryptedSecret) return undefined;
+  if (!encryptedSecret.startsWith("awenc:v1:")) return undefined;
+
+  const [, , ivBase64, payloadBase64] = encryptedSecret.split(":");
+  if (!ivBase64 || !payloadBase64) return undefined;
+
+  const key = await importSandboxCryptoKey();
+  const decrypted = await globalThis.crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64ToBytes(ivBase64) },
+    key,
+    base64ToBytes(payloadBase64),
+  );
+
+  return new TextDecoder().decode(decrypted);
+}
+
 function keyPrefix(apiKey: string) {
   return apiKey.length <= 20 ? apiKey : `${apiKey.slice(0, 16)}...`;
 }
@@ -220,6 +284,12 @@ function mapReceiptRow(row: ReceiptRow): ActionReceipt {
     policy: row.policy,
     feedback: row.feedback,
     provider: row.provider ?? undefined,
+    mode: row.mode ?? undefined,
+    stdout: row.stdout ?? undefined,
+    stderr: row.stderr ?? undefined,
+    exitCode: row.exit_code ?? undefined,
+    durationMs: row.duration_ms ?? undefined,
+    error: row.error ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -258,7 +328,26 @@ function mapApiKeyRow(row: ApiKeyRow): AgentWingApiKeyRecord {
 }
 
 async function getDb() {
-  return getAgentWingD1();
+  const db = await getAgentWingD1();
+  if (!db) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("AGENTWING_DB binding is required in production.");
+    }
+    warnD1Fallback("missing-binding", new Error("AGENTWING_DB binding unavailable"));
+  }
+  return db;
+}
+
+const fallbackWarnings = new Set<string>();
+
+function warnD1Fallback(area: string, error: unknown) {
+  if (process.env.NODE_ENV === "production") {
+    throw error instanceof Error ? error : new Error("D1 unavailable in production.");
+  }
+  if (fallbackWarnings.has(area)) return;
+  fallbackWarnings.add(area);
+  const message = error instanceof Error ? error.message : "Unknown D1 error";
+  console.warn(`[AgentWing] D1 unavailable for ${area}; using local dev fallback. ${message}`);
 }
 
 async function ensureD1DemoKey(db: AgentWingD1Database) {
@@ -350,7 +439,8 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
         keyPrefix: row.key_prefix ?? keyPrefix(rawApiKey),
         isDemo: false,
       };
-    } catch {
+    } catch (error) {
+      warnD1Fallback("listProjects", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -410,7 +500,8 @@ export async function listProjects(): Promise<AgentWingProject[]> {
         .prepare("SELECT project_id, name, created_at FROM projects ORDER BY created_at DESC")
         .all<ProjectRow>();
       return (result.results ?? []).map(mapProjectRow);
-    } catch {
+    } catch (error) {
+      warnD1Fallback("createProject", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -438,7 +529,8 @@ export async function createProject(name: string): Promise<AgentWingProject> {
         .bind(project.projectId, project.name, project.createdAt)
         .run();
       return project;
-    } catch {
+    } catch (error) {
+      warnD1Fallback("listApiKeys", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -471,7 +563,8 @@ export async function listApiKeys(projectId?: string): Promise<AgentWingApiKeyRe
           );
       const result = await statement.all<ApiKeyRow>();
       return (result.results ?? []).map(mapApiKeyRow);
-    } catch {
+    } catch (error) {
+      warnD1Fallback("generateApiKey", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -534,7 +627,8 @@ export async function generateApiKey(projectId: string) {
         .run();
       await ensureD1UsageForKey(db, apiKeyId, record);
       return { apiKey, record };
-    } catch {
+    } catch (error) {
+      warnD1Fallback("getUsageForApiKey", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -567,7 +661,8 @@ export async function getUsageForApiKey(apiKeyId: string) {
         .bind(apiKeyId)
         .first<UsageRow>();
       return publicUsage(row ? mapUsageRow(row) : createDefaultUsage(apiKeyId));
-    } catch {
+    } catch (error) {
+      warnD1Fallback("incrementActionCheckUsage", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -591,7 +686,8 @@ export async function incrementActionCheckUsage(apiKeyId: string) {
         .bind(apiKeyId)
         .run();
       return getUsageForApiKey(apiKeyId);
-    } catch {
+    } catch (error) {
+      warnD1Fallback("incrementSandboxRunUsage", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -617,7 +713,8 @@ export async function incrementSandboxRunUsage(apiKeyId: string) {
         .bind(apiKeyId)
         .run();
       return getUsageForApiKey(apiKeyId);
-    } catch {
+    } catch (error) {
+      warnD1Fallback("incrementSandboxRunUsage", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -646,6 +743,12 @@ export async function createReceipt(
     policy: evaluation.policy,
     feedback: evaluation.feedback,
     provider: evaluation.provider,
+    mode: evaluation.mode,
+    stdout: evaluation.stdout,
+    stderr: evaluation.stderr,
+    exitCode: evaluation.exitCode,
+    durationMs: evaluation.durationMs,
+    error: evaluation.error,
     createdAt: nowIso(),
   };
 
@@ -656,8 +759,8 @@ export async function createReceipt(
       await db
         .prepare(
           `INSERT INTO receipts
-           (receipt_id, api_key, project_id, session_id, agent_id, action_type, tool, target, raw_action, decision, risk, policy, feedback, provider, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (receipt_id, api_key, project_id, session_id, agent_id, action_type, tool, target, raw_action, decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           receipt.receiptId,
@@ -674,6 +777,12 @@ export async function createReceipt(
           receipt.policy,
           receipt.feedback,
           receipt.provider ?? null,
+          receipt.mode ?? null,
+          receipt.stdout ?? null,
+          receipt.stderr ?? null,
+          receipt.exitCode ?? null,
+          receipt.durationMs ?? null,
+          receipt.error ?? null,
           receipt.createdAt,
         )
         .run();
@@ -691,7 +800,8 @@ export async function createReceipt(
       }
 
       return receipt;
-    } catch {
+    } catch (error) {
+      warnD1Fallback("createReceipt", error);
       // D1 binding may be absent from local Next dev or present before migrations are applied.
     }
   }
@@ -714,7 +824,7 @@ export async function listReceipts() {
       const result = await db
         .prepare(
           `SELECT receipt_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
-                  decision, risk, policy, feedback, provider, created_at
+                  decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
            FROM receipts
            ORDER BY created_at DESC
           LIMIT 500`,
@@ -727,7 +837,8 @@ export async function listReceipts() {
       return [...memoryReceipts, ...d1Receipts]
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .slice(0, 500);
-    } catch {
+    } catch (error) {
+      warnD1Fallback("listReceipts", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -743,14 +854,15 @@ export async function getReceipt(receiptId: string) {
       const row = await db
         .prepare(
           `SELECT receipt_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
-                  decision, risk, policy, feedback, provider, created_at
+                  decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
            FROM receipts
            WHERE receipt_id = ?`,
         )
         .bind(receiptId)
         .first<ReceiptRow>();
       return row ? mapReceiptRow(row) : memoryReceipt;
-    } catch {
+    } catch (error) {
+      warnD1Fallback("getReceipt", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -770,7 +882,8 @@ export async function getReceiptStats(): Promise<ReceiptStats> {
         sandboxRequired: receipts.filter((receipt) => receipt.decision === "sandbox_required").length,
         receiptsCreated: receipts.length,
       };
-    } catch {
+    } catch (error) {
+      warnD1Fallback("getReceiptStats", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -800,7 +913,8 @@ export async function getSandboxConfig(apiKeyId = DEMO_API_KEY) {
         e2bKeyLast4: row?.e2b_key_last4 ?? undefined,
         e2bKeyUpdatedAt: row?.updated_at ?? undefined,
       };
-    } catch {
+    } catch (error) {
+      warnD1Fallback("getSandboxConfig", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -832,12 +946,12 @@ export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
              e2b_key_encrypted = excluded.e2b_key_encrypted,
              updated_at = excluded.updated_at`,
         )
-        .bind(ownerApiKeyId, trimmed.slice(-4), "[TODO: encrypted Cloudflare secret storage]")
+        .bind(ownerApiKeyId, trimmed.slice(-4), await encryptSandboxSecret(trimmed))
         .run();
 
-      // TODO: Encrypt BYOK sandbox credentials before storing usable provider credentials in D1.
       return getSandboxConfig(ownerApiKeyId);
-    } catch {
+    } catch (error) {
+      warnD1Fallback("saveE2BKey", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
@@ -858,4 +972,41 @@ export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
 export async function hasSavedE2BKey(apiKeyId = DEMO_API_KEY) {
   const config = await getSandboxConfig(apiKeyId);
   return Boolean(config.e2bKeySaved);
+}
+
+async function getD1E2BApiKey(db: AgentWingD1Database, apiKeyId: string) {
+  const row = await db
+    .prepare(
+      "SELECT mode, e2b_key_saved, e2b_key_last4, e2b_key_encrypted, updated_at FROM sandbox_configs WHERE api_key = ?",
+    )
+    .bind(apiKeyId)
+    .first<SandboxRow>();
+
+  if (!row?.e2b_key_saved || row.mode !== "e2b_byok") return undefined;
+  return decryptSandboxSecret(row.e2b_key_encrypted);
+}
+
+export async function getE2BApiKeyForExecution(apiKeyId = DEMO_API_KEY) {
+  const db = await getDb();
+  if (db) {
+    try {
+      await ensureD1DemoKey(db);
+      const projectKey = await getD1E2BApiKey(db, apiKeyId);
+      if (projectKey) return projectKey;
+
+      if (apiKeyId !== DEMO_API_KEY) {
+        const demoKey = await getD1E2BApiKey(db, DEMO_API_KEY);
+        if (demoKey) return demoKey;
+      }
+    } catch (error) {
+      warnD1Fallback("getE2BApiKeyForExecution", error);
+      // Fall back to memory/env in local development if D1 is not ready.
+    }
+  }
+
+  const devStoredKey = getState().sandbox.e2bApiKey?.trim();
+  if (devStoredKey) return devStoredKey;
+
+  const envKey = process.env.E2B_API_KEY?.trim();
+  return envKey || undefined;
 }

@@ -25,6 +25,27 @@ const usageExample = `const usage = await fetch("https://your-agentwing-host.com
   }
 }).then((response) => response.json());`;
 
+const sandboxRunExample = `const sandboxResult = await fetch("https://your-agentwing-host.com/api/v1/sandbox/run", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: \`Bearer \${process.env.AGENTWING_API_KEY}\`
+  },
+  body: JSON.stringify({
+    projectId: "proj_live",
+    sessionId: "sess_123",
+    agentId: "agent_coder",
+    provider: "e2b",
+    action: {
+      actionType: "shell_command",
+      tool: "terminal",
+      target: "e2b sandbox",
+      command: "node -e \\"console.log('hello from AgentWing sandbox')\\"",
+      description: "Run command in an E2B BYOK sandbox"
+    }
+  })
+}).then((response) => response.json());`;
+
 const createProjectExample = `const { project } = await fetch("https://your-agentwing-host.com/api/v1/projects", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -39,14 +60,20 @@ const generateKeyExample = `const { apiKey } = await fetch("https://your-agentwi
 
 // Store this securely. AgentWing only shows the full key once.`;
 
-const d1Commands = `wrangler d1 create agentwing-live-lab
+const d1Commands = `wrangler d1 create agentwing_v1
 
 # Put the returned database_id into wrangler.jsonc:
 # binding = AGENTWING_DB
-# database_name = agentwing-live-lab
+# database_name = agentwing_v1
 
-wrangler d1 migrations apply agentwing-live-lab --local
-wrangler d1 migrations apply agentwing-live-lab --remote`;
+wrangler d1 migrations apply agentwing_v1 --local
+wrangler d1 migrations apply agentwing_v1 --remote`;
+
+const sandboxSecretCommands = `# Required when storing usable BYOK sandbox keys in D1
+wrangler secret put AGENTWING_SANDBOX_SECRET
+
+# Optional server-level E2B fallback key
+wrangler secret put E2B_API_KEY`;
 
 const sdkExample = `import { AgentWing } from "@agentwing/sdk";
 
@@ -109,6 +136,7 @@ export default function DocsPage() {
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
           Authenticate API requests with <span className="font-mono text-cyan-100">Authorization: Bearer &lt;key&gt;</span>.
           Local development includes <span className="font-mono text-cyan-100">aw_live_demo_key</span> on the Beta plan.
+          Project and API key management endpoints are intended for authenticated dashboard/admin sessions.
         </p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -125,8 +153,10 @@ export default function DocsPage() {
         <DocSection title="Create a client" code={sdkExample} />
         <DocSection title="Guard tool execution" code={guardExample} />
         <DocSection title="Use the HTTP API" code={fetchExample} />
+        <DocSection title="Run sandbox-required action" code={sandboxRunExample} />
         <DocSection title="Check usage balance" code={usageExample} />
         <DocSection title="Cloudflare D1 persistence" code={d1Commands} />
+        <DocSection title="Sandbox secrets" code={sandboxSecretCommands} />
 
         <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
           <h2 className="text-xl font-semibold text-white">Persistent storage</h2>
@@ -143,6 +173,37 @@ export default function DocsPage() {
             Send projectId, sessionId, agentId, actionType, tool, target, command, description, and metadata.
             Supported action types are file_access, shell_command, api_call, browser_action, database_query,
             message_send, payment_action, deploy_action, and custom_action.
+          </p>
+        </section>
+
+        <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
+          <h2 className="text-xl font-semibold text-white">Decisions</h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {[
+              ["allow", "The action is low risk and can execute."],
+              ["block", "The action is denied, such as secret access or force push."],
+              ["approval_required", "A human should approve before the action executes."],
+              ["sandbox_required", "Run the action in an isolated sandbox before continuing."],
+              ["restore_point_required", "Create a restore point before mutating files or state."],
+            ].map(([decision, copy]) => (
+              <div key={decision} className="rounded border border-white/[0.08] bg-[#05070d] p-3">
+                <p className="font-mono text-sm text-cyan-100">{decision}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{copy}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
+          <h2 className="text-xl font-semibold text-white">Sandbox modes</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            E2B BYOK lets teams connect their own E2B account and keep sandbox credentials server-side. Custom HTTP
+            sandboxes are planned for teams with their own runner. AgentWing Managed Sandbox is coming later and is not
+            enabled in this V1 build.
+          </p>
+          <p className="mt-3 text-sm leading-6 text-slate-400">
+            Customers do not install the E2B SDK or write E2B code. They call AgentWing with their AgentWing API key;
+            AgentWing uses the saved BYOK key server-side when a policy requires sandbox execution.
           </p>
         </section>
       </section>

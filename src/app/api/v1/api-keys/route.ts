@@ -1,8 +1,11 @@
 import { generateApiKey, listApiKeys } from "@/lib/agentwingStore";
+import { adminRequiredResponse, isAdminRequest } from "@/lib/adminAccess";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId") ?? undefined;
 
@@ -12,6 +15,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+
   let body: unknown;
 
   try {

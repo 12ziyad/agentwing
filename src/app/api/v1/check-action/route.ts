@@ -5,6 +5,7 @@ import {
   unauthorizedResponse,
   validateApiKeyFromRequest,
 } from "@/lib/agentwingStore";
+import { actionCheckLimitExceeded, actionCheckLimitResponse } from "@/lib/rateLimit";
 import { actionTypes, type AgentAction, type PolicyEvaluation } from "@/lib/agentwingTypes";
 
 export const runtime = "nodejs";
@@ -57,15 +58,12 @@ export async function POST(request: Request) {
   }
 
   const usage = await incrementActionCheckUsage(auth.apiKeyId);
+  if (actionCheckLimitExceeded(usage)) {
+    return actionCheckLimitResponse(usage);
+  }
+
   const evaluation: PolicyEvaluation =
-    usage.actionChecksUsed > usage.actionCheckLimit
-      ? {
-          decision: "block",
-          risk: "medium",
-          policy: "plan-limit-action-checks",
-          feedback: "Action check limit reached for this API key.",
-        }
-      : evaluateAgentAction(action);
+    evaluateAgentAction(action);
   const receipt = await createReceipt(action, evaluation, auth.apiKeyId);
 
   return Response.json({

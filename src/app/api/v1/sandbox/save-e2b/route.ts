@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return Response.json({
       ok: true,
       sandbox,
-      message: "E2B key saved server-side for this development process.",
+      message: "E2B key saved server-side. The raw key is never returned.",
     });
   } catch (error) {
     return Response.json(
