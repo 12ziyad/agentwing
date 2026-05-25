@@ -1,17 +1,22 @@
-import { adminRequiredResponse, isAdminRequest } from "@/lib/adminAccess";
-import { getE2BApiKeyForExecution, getSandboxConfig, recordE2BTestResult } from "@/lib/agentwingStore";
+import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
+import { getE2BApiKeyForExecution, getSandboxConfig, recordE2BTestResult, sandboxOwnerKeyForWorkspace } from "@/lib/agentwingStore";
 import type { AgentAction } from "@/lib/agentwingTypes";
 import { runE2BSandbox } from "@/lib/sandbox/providers/e2b";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+  const auth = await getDashboardAuth(request);
+  if (!auth) return authRequiredResponse();
 
-  const [apiKey, sandbox] = await Promise.all([getE2BApiKeyForExecution(), getSandboxConfig()]);
+  const sandboxOwnerId = sandboxOwnerKeyForWorkspace(auth.workspaceId);
+  const [apiKey, sandbox] = await Promise.all([
+    getE2BApiKeyForExecution(sandboxOwnerId, auth.workspaceId),
+    getSandboxConfig(sandboxOwnerId),
+  ]);
 
   if (!apiKey || !sandbox.connected) {
-    const nextSandbox = await recordE2BTestResult("failed");
+    const nextSandbox = await recordE2BTestResult("failed", sandboxOwnerId);
     return Response.json(
       {
         ok: false,
@@ -42,7 +47,7 @@ export async function POST(request: Request) {
       projectId: action.projectId,
       sessionId: action.sessionId,
     });
-    const nextSandbox = await recordE2BTestResult(result.exitCode === 0 ? "success" : "failed");
+    const nextSandbox = await recordE2BTestResult(result.exitCode === 0 ? "success" : "failed", sandboxOwnerId);
 
     if (result.exitCode !== 0 || result.error) {
       return Response.json(
@@ -63,7 +68,7 @@ export async function POST(request: Request) {
       message: "E2B BYOK connection test succeeded. Runtime sandbox execution is enabled.",
     });
   } catch (error) {
-    const nextSandbox = await recordE2BTestResult("failed");
+    const nextSandbox = await recordE2BTestResult("failed", sandboxOwnerId);
     return Response.json(
       {
         ok: false,

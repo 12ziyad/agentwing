@@ -47,6 +47,7 @@ async function receiptForSandboxFailure(
   apiKeyId: string,
   feedback: string,
   error: string,
+  workspaceId?: string,
   status = 502,
 ) {
   const receipt = await createReceipt(
@@ -64,6 +65,7 @@ async function receiptForSandboxFailure(
       error,
     },
     apiKeyId,
+    workspaceId,
   );
 
   return Response.json(
@@ -120,11 +122,12 @@ export async function POST(request: Request) {
       auth.apiKeyId,
       evaluation.feedback,
       "AgentWing policy blocked this action before sandbox execution.",
+      auth.workspaceId,
       403,
     );
   }
 
-  const e2bApiKey = await getE2BApiKeyForExecution(auth.apiKeyId);
+  const e2bApiKey = await getE2BApiKeyForExecution(auth.apiKeyId, auth.workspaceId);
   if (!e2bApiKey) {
     return receiptForSandboxFailure(
       action,
@@ -132,6 +135,7 @@ export async function POST(request: Request) {
       auth.apiKeyId,
       "No E2B BYOK key is available server-side for sandbox execution.",
       "Save an E2B BYOK key in AgentWing or set E2B_API_KEY on the backend.",
+      auth.workspaceId,
       400,
     );
   }
@@ -163,6 +167,7 @@ export async function POST(request: Request) {
         error: result.error,
       },
       auth.apiKeyId,
+      auth.workspaceId,
     );
 
     return Response.json({
@@ -189,6 +194,7 @@ export async function POST(request: Request) {
       auth.apiKeyId,
       "E2B sandbox execution failed before the command completed.",
       message,
+      auth.workspaceId,
     );
   }
 }

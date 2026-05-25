@@ -1,21 +1,23 @@
 import { generateApiKey, listApiKeys } from "@/lib/agentwingStore";
-import { adminRequiredResponse, isAdminRequest } from "@/lib/adminAccess";
+import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+  const auth = await getDashboardAuth(request);
+  if (!auth) return authRequiredResponse();
 
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId") ?? undefined;
 
   return Response.json({
-    apiKeys: await listApiKeys(projectId),
+    apiKeys: await listApiKeys(projectId, auth.workspaceId),
   });
 }
 
 export async function POST(request: Request) {
-  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+  const auth = await getDashboardAuth(request);
+  if (!auth) return authRequiredResponse();
 
   let body: unknown;
 
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
       : "";
 
   try {
-    const result = await generateApiKey(projectId);
+    const result = await generateApiKey(projectId, auth.workspaceId);
     return Response.json(
       {
         apiKey: result.apiKey,

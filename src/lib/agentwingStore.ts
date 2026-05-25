@@ -4,6 +4,9 @@ import type {
   AgentAction,
   AgentWingApiKeyRecord,
   AgentWingProject,
+  AgentWingUser,
+  AgentWingWorkspace,
+  DashboardAuthContext,
   ApiKeyUsage,
   PolicyEvaluation,
   ReceiptStats,
@@ -27,10 +30,15 @@ type StoreState = {
   projects: AgentWingProject[];
   apiKeysById: Record<string, ApiKeyInternal>;
   rawApiKeyToId: Record<string, string>;
+  usersById: Record<string, AgentWingUser>;
+  workspacesById: Record<string, AgentWingWorkspace>;
+  userWorkspaceIds: Record<string, string>;
+  sessionsByTokenHash: Record<string, { sessionId: string; userId: string; tokenHash: string; expiresAt: string; createdAt: string }>;
 };
 
 type AuthenticatedApiKey = {
   apiKeyId: string;
+  workspaceId?: string;
   projectId?: string;
   keyPrefix: string;
   isDemo: boolean;
@@ -38,6 +46,7 @@ type AuthenticatedApiKey = {
 
 type ReceiptRow = {
   receipt_id: string;
+  workspace_id?: string | null;
   project_id?: string | null;
   session_id?: string | null;
   agent_id?: string | null;
@@ -71,6 +80,7 @@ type UsageRow = {
 
 type ProjectRow = {
   project_id: string;
+  workspace_id?: string | null;
   name: string;
   created_at: string;
 };
@@ -78,6 +88,7 @@ type ProjectRow = {
 type ApiKeyRow = {
   api_key: string;
   api_key_id?: string | null;
+  workspace_id?: string | null;
   project_id?: string | null;
   key_prefix?: string | null;
   plan_name: string;
@@ -88,6 +99,7 @@ type ApiKeyRow = {
 };
 
 type SandboxRow = {
+  workspace_id?: string | null;
   mode: SandboxProviderConfig["mode"];
   e2b_key_saved: number;
   e2b_key_prefix?: string | null;
@@ -97,6 +109,32 @@ type SandboxRow = {
   updated_at?: string | null;
   last_test_status?: string | null;
   last_tested_at?: string | null;
+};
+
+type UserRow = {
+  user_id: string;
+  email: string;
+  name?: string | null;
+  image?: string | null;
+  provider: "google";
+  provider_account_id: string;
+  created_at: string;
+  last_login_at: string;
+};
+
+type WorkspaceRow = {
+  workspace_id: string;
+  name: string;
+  owner_user_id: string;
+  created_at: string;
+};
+
+type SessionRow = {
+  session_id: string;
+  user_id: string;
+  token_hash: string;
+  expires_at: string;
+  created_at: string;
 };
 
 const STORE_SYMBOL = Symbol.for("agentwing.dev.store");
@@ -163,6 +201,10 @@ function getState(): StoreState {
       rawApiKeyToId: {
         [DEMO_API_KEY]: DEMO_API_KEY,
       },
+      usersById: {},
+      workspacesById: {},
+      userWorkspaceIds: {},
+      sessionsByTokenHash: {},
     };
   }
   return globalStore[STORE_SYMBOL];
@@ -277,6 +319,7 @@ export function sanitizeAction(action: AgentAction): AgentAction {
 function mapReceiptRow(row: ReceiptRow): ActionReceipt {
   return {
     receiptId: row.receipt_id,
+    workspaceId: row.workspace_id ?? undefined,
     projectId: row.project_id ?? undefined,
     sessionId: row.session_id ?? undefined,
     agentId: row.agent_id ?? undefined,
@@ -314,6 +357,7 @@ function mapUsageRow(row: UsageRow): ApiKeyUsage {
 function mapProjectRow(row: ProjectRow): AgentWingProject {
   return {
     projectId: row.project_id,
+    workspaceId: row.workspace_id ?? undefined,
     name: row.name,
     createdAt: row.created_at,
   };
@@ -322,6 +366,7 @@ function mapProjectRow(row: ProjectRow): AgentWingProject {
 function mapApiKeyRow(row: ApiKeyRow): AgentWingApiKeyRecord {
   return {
     apiKeyId: row.api_key_id ?? row.api_key,
+    workspaceId: row.workspace_id ?? undefined,
     projectId: row.project_id ?? undefined,
     keyPrefix: row.key_prefix ?? row.api_key,
     planName: row.plan_name,
@@ -329,6 +374,28 @@ function mapApiKeyRow(row: ApiKeyRow): AgentWingApiKeyRecord {
     sandboxRunLimit: row.sandbox_run_limit,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at ?? undefined,
+  };
+}
+
+function mapUserRow(row: UserRow): AgentWingUser {
+  return {
+    userId: row.user_id,
+    email: row.email,
+    name: row.name ?? undefined,
+    image: row.image ?? undefined,
+    provider: row.provider,
+    providerAccountId: row.provider_account_id,
+    createdAt: row.created_at,
+    lastLoginAt: row.last_login_at,
+  };
+}
+
+function mapWorkspaceRow(row: WorkspaceRow): AgentWingWorkspace {
+  return {
+    workspaceId: row.workspace_id,
+    name: row.name,
+    ownerUserId: row.owner_user_id,
+    createdAt: row.created_at,
   };
 }
 
@@ -381,6 +448,20 @@ function publicSandboxConfig(row?: Partial<SandboxRow> | null): SandboxProviderC
     e2bKeyLast4: row?.e2b_key_last4 ?? undefined,
     e2bKeyUpdatedAt: row?.updated_at ?? undefined,
   };
+}
+
+export function sandboxOwnerKeyForWorkspace(workspaceId?: string) {
+  return workspaceId ? `workspace:${workspaceId}` : DEMO_API_KEY;
+}
+
+function workspaceIdFromSandboxOwner(ownerApiKeyId: string) {
+  return ownerApiKeyId.startsWith("workspace:") ? ownerApiKeyId.slice("workspace:".length) : undefined;
+}
+
+function workspaceNameFromEmail(email: string) {
+  const localPart = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  if (!localPart) return "My Workspace";
+  return `${localPart.replace(/\b\w/g, (char) => char.toUpperCase())} Workspace`;
 }
 
 async function getDb() {
@@ -446,6 +527,209 @@ async function ensureD1DemoKey(db: AgentWingD1Database) {
     .run();
 }
 
+export async function upsertGoogleUserAndWorkspace(profile: {
+  providerAccountId: string;
+  email: string;
+  name?: string;
+  image?: string;
+}): Promise<{ user: AgentWingUser; workspace: AgentWingWorkspace }> {
+  const email = profile.email.trim().toLowerCase();
+  if (!email) throw new Error("Google profile did not include an email address.");
+
+  const now = nowIso();
+  const db = await getDb();
+  if (db) {
+    try {
+      let userRow = await db
+        .prepare("SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE provider = 'google' AND provider_account_id = ?")
+        .bind(profile.providerAccountId)
+        .first<UserRow>();
+
+      if (!userRow) {
+        userRow = await db
+          .prepare("SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE email = ?")
+          .bind(email)
+          .first<UserRow>();
+      }
+
+      const userId = userRow?.user_id ?? randomId("user");
+      if (userRow) {
+        await db
+          .prepare(
+            `UPDATE users
+             SET email = ?, name = ?, image = ?, provider = 'google', provider_account_id = ?, last_login_at = ?
+             WHERE user_id = ?`,
+          )
+          .bind(email, profile.name ?? null, profile.image ?? null, profile.providerAccountId, now, userId)
+          .run();
+      } else {
+        await db
+          .prepare(
+            `INSERT INTO users
+             (user_id, email, name, image, provider, provider_account_id, created_at, last_login_at)
+             VALUES (?, ?, ?, ?, 'google', ?, ?, ?)`,
+          )
+          .bind(userId, email, profile.name ?? null, profile.image ?? null, profile.providerAccountId, now, now)
+          .run();
+      }
+
+      const user = mapUserRow(
+        (await db
+          .prepare("SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE user_id = ?")
+          .bind(userId)
+          .first<UserRow>())!,
+      );
+
+      let workspaceRow = await db
+        .prepare("SELECT workspace_id, name, owner_user_id, created_at FROM workspaces WHERE owner_user_id = ? ORDER BY created_at ASC LIMIT 1")
+        .bind(user.userId)
+        .first<WorkspaceRow>();
+
+      if (!workspaceRow) {
+        const workspaceId = randomId("ws");
+        await db
+          .prepare("INSERT INTO workspaces (workspace_id, name, owner_user_id, created_at) VALUES (?, ?, ?, ?)")
+          .bind(workspaceId, workspaceNameFromEmail(email), user.userId, now)
+          .run();
+        await db
+          .prepare("INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)")
+          .bind(workspaceId, user.userId, now)
+          .run();
+        workspaceRow = (await db
+          .prepare("SELECT workspace_id, name, owner_user_id, created_at FROM workspaces WHERE workspace_id = ?")
+          .bind(workspaceId)
+          .first<WorkspaceRow>())!;
+      } else {
+        await db
+          .prepare("INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)")
+          .bind(workspaceRow.workspace_id, user.userId, now)
+          .run();
+      }
+
+      return { user, workspace: mapWorkspaceRow(workspaceRow) };
+    } catch (error) {
+      warnD1Fallback("upsertGoogleUserAndWorkspace", error);
+    }
+  }
+
+  const state = getState();
+  const existingUser = Object.values(state.usersById).find(
+    (user) => user.provider === "google" && user.providerAccountId === profile.providerAccountId,
+  );
+  const user: AgentWingUser = {
+    userId: existingUser?.userId ?? randomId("user"),
+    email,
+    name: profile.name,
+    image: profile.image,
+    provider: "google",
+    providerAccountId: profile.providerAccountId,
+    createdAt: existingUser?.createdAt ?? now,
+    lastLoginAt: now,
+  };
+  state.usersById[user.userId] = user;
+
+  const existingWorkspaceId = state.userWorkspaceIds[user.userId];
+  const workspace: AgentWingWorkspace = existingWorkspaceId
+    ? state.workspacesById[existingWorkspaceId]
+    : {
+        workspaceId: randomId("ws"),
+        name: workspaceNameFromEmail(email),
+        ownerUserId: user.userId,
+        createdAt: now,
+      };
+  state.workspacesById[workspace.workspaceId] = workspace;
+  state.userWorkspaceIds[user.userId] = workspace.workspaceId;
+
+  return { user, workspace };
+}
+
+export async function createUserSession(userId: string, tokenHash: string, expiresAt: string) {
+  const session = {
+    sessionId: randomId("sess"),
+    userId,
+    tokenHash,
+    expiresAt,
+    createdAt: nowIso(),
+  };
+
+  const db = await getDb();
+  if (db) {
+    try {
+      await db
+        .prepare("INSERT INTO sessions (session_id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(session.sessionId, session.userId, session.tokenHash, session.expiresAt, session.createdAt)
+        .run();
+      return session;
+    } catch (error) {
+      warnD1Fallback("createUserSession", error);
+    }
+  }
+
+  getState().sessionsByTokenHash[tokenHash] = session;
+  return session;
+}
+
+export async function getUserSession(tokenHash: string): Promise<DashboardAuthContext | undefined> {
+  const db = await getDb();
+  if (db) {
+    try {
+      const row = await db
+        .prepare("SELECT session_id, user_id, token_hash, expires_at, created_at FROM sessions WHERE token_hash = ?")
+        .bind(tokenHash)
+        .first<SessionRow>();
+      if (!row || Date.parse(row.expires_at) <= Date.now()) return undefined;
+
+      const userRow = await db
+        .prepare("SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE user_id = ?")
+        .bind(row.user_id)
+        .first<UserRow>();
+      if (!userRow) return undefined;
+
+      const workspaceRow = await db
+        .prepare(
+          `SELECT workspaces.workspace_id, workspaces.name, workspaces.owner_user_id, workspaces.created_at
+           FROM workspaces
+           INNER JOIN workspace_members ON workspace_members.workspace_id = workspaces.workspace_id
+           WHERE workspace_members.user_id = ?
+           ORDER BY workspaces.created_at ASC
+           LIMIT 1`,
+        )
+        .bind(userRow.user_id)
+        .first<WorkspaceRow>();
+      if (!workspaceRow) return undefined;
+
+      const user = mapUserRow(userRow);
+      const workspace = mapWorkspaceRow(workspaceRow);
+      return { mode: "user", user, workspace, workspaceId: workspace.workspaceId };
+    } catch (error) {
+      warnD1Fallback("getUserSession", error);
+    }
+  }
+
+  const state = getState();
+  const session = state.sessionsByTokenHash[tokenHash];
+  if (!session || Date.parse(session.expiresAt) <= Date.now()) return undefined;
+  const user = state.usersById[session.userId];
+  const workspaceId = state.userWorkspaceIds[session.userId];
+  const workspace = workspaceId ? state.workspacesById[workspaceId] : undefined;
+  if (!user || !workspace) return undefined;
+  return { mode: "user", user, workspace, workspaceId };
+}
+
+export async function deleteUserSession(tokenHash: string) {
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(tokenHash).run();
+      return;
+    } catch (error) {
+      warnD1Fallback("deleteUserSession", error);
+    }
+  }
+
+  delete getState().sessionsByTokenHash[tokenHash];
+}
+
 export function getApiKeyFromRequest(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
   const [scheme, token] = authorization.split(/\s+/, 2);
@@ -473,7 +757,7 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
       const hash = await sha256(rawApiKey);
       const row = await db
         .prepare(
-          `SELECT api_key, api_key_id, project_id, key_prefix, plan_name, action_check_limit,
+          `SELECT api_key, api_key_id, workspace_id, project_id, key_prefix, plan_name, action_check_limit,
                   sandbox_run_limit, created_at, last_used_at
            FROM api_keys
            WHERE key_hash = ? AND disabled_at IS NULL`,
@@ -491,6 +775,7 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
 
       return {
         apiKeyId,
+        workspaceId: row.workspace_id ?? undefined,
         projectId: row.project_id ?? undefined,
         keyPrefix: row.key_prefix ?? keyPrefix(rawApiKey),
         isDemo: false,
@@ -509,6 +794,7 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
 
   return {
     apiKeyId,
+    workspaceId: record.workspaceId,
     projectId: record.projectId,
     keyPrefix: record.keyPrefix,
     isDemo: rawApiKey === DEMO_API_KEY,
@@ -547,14 +833,17 @@ async function ensureD1UsageForKey(db: AgentWingD1Database, apiKeyId: string, re
     .run();
 }
 
-export async function listProjects(): Promise<AgentWingProject[]> {
+export async function listProjects(workspaceId?: string): Promise<AgentWingProject[]> {
   const db = await getDb();
   if (db) {
     try {
       await ensureD1DemoKey(db);
-      const result = await db
-        .prepare("SELECT project_id, name, created_at FROM projects ORDER BY created_at DESC")
-        .all<ProjectRow>();
+      const statement = workspaceId
+        ? db
+            .prepare("SELECT project_id, workspace_id, name, created_at FROM projects WHERE workspace_id = ? ORDER BY created_at DESC")
+            .bind(workspaceId)
+        : db.prepare("SELECT project_id, workspace_id, name, created_at FROM projects ORDER BY created_at DESC");
+      const result = await statement.all<ProjectRow>();
       return (result.results ?? []).map(mapProjectRow);
     } catch (error) {
       warnD1Fallback("createProject", error);
@@ -562,12 +851,13 @@ export async function listProjects(): Promise<AgentWingProject[]> {
     }
   }
 
-  return getState().projects;
+  return getState().projects.filter((project) => !workspaceId || project.workspaceId === workspaceId);
 }
 
-export async function createProject(name: string): Promise<AgentWingProject> {
+export async function createProject(name: string, workspaceId?: string): Promise<AgentWingProject> {
   const project: AgentWingProject = {
     projectId: randomId("proj"),
+    workspaceId,
     name: name.trim(),
     createdAt: nowIso(),
   };
@@ -581,8 +871,8 @@ export async function createProject(name: string): Promise<AgentWingProject> {
     try {
       await ensureD1DemoKey(db);
       await db
-        .prepare("INSERT INTO projects (project_id, name, created_at) VALUES (?, ?, ?)")
-        .bind(project.projectId, project.name, project.createdAt)
+        .prepare("INSERT INTO projects (project_id, workspace_id, name, created_at) VALUES (?, ?, ?, ?)")
+        .bind(project.projectId, workspaceId ?? null, project.name, project.createdAt)
         .run();
       return project;
     } catch (error) {
@@ -595,28 +885,30 @@ export async function createProject(name: string): Promise<AgentWingProject> {
   return project;
 }
 
-export async function listApiKeys(projectId?: string): Promise<AgentWingApiKeyRecord[]> {
+export async function listApiKeys(projectId?: string, workspaceId?: string): Promise<AgentWingApiKeyRecord[]> {
   const db = await getDb();
   if (db) {
     try {
       await ensureD1DemoKey(db);
-      const statement = projectId
-        ? db
-            .prepare(
-              `SELECT api_key, api_key_id, project_id, key_prefix, plan_name, action_check_limit,
-                      sandbox_run_limit, created_at, last_used_at
-               FROM api_keys
-               WHERE project_id = ?
-               ORDER BY created_at DESC`,
-            )
-            .bind(projectId)
-        : db.prepare(
-            `SELECT api_key, api_key_id, project_id, key_prefix, plan_name, action_check_limit,
-                    sandbox_run_limit, created_at, last_used_at
-             FROM api_keys
-             WHERE project_id IS NOT NULL
-             ORDER BY created_at DESC`,
-          );
+      const conditions = ["project_id IS NOT NULL"];
+      const values: string[] = [];
+      if (projectId) {
+        conditions.push("project_id = ?");
+        values.push(projectId);
+      }
+      if (workspaceId) {
+        conditions.push("workspace_id = ?");
+        values.push(workspaceId);
+      }
+      const statement = db
+        .prepare(
+          `SELECT api_key, api_key_id, workspace_id, project_id, key_prefix, plan_name, action_check_limit,
+                  sandbox_run_limit, created_at, last_used_at
+           FROM api_keys
+           WHERE ${conditions.join(" AND ")}
+           ORDER BY created_at DESC`,
+        )
+        .bind(...values);
       const result = await statement.all<ApiKeyRow>();
       return (result.results ?? []).map(mapApiKeyRow);
     } catch (error) {
@@ -628,8 +920,10 @@ export async function listApiKeys(projectId?: string): Promise<AgentWingApiKeyRe
   return Object.values(getState().apiKeysById)
     .filter((record) => record.apiKeyId !== DEMO_API_KEY)
     .filter((record) => !projectId || record.projectId === projectId)
+    .filter((record) => !workspaceId || record.workspaceId === workspaceId)
     .map((record) => ({
       apiKeyId: record.apiKeyId,
+      workspaceId: record.workspaceId,
       projectId: record.projectId,
       keyPrefix: record.keyPrefix,
       planName: record.planName,
@@ -640,8 +934,8 @@ export async function listApiKeys(projectId?: string): Promise<AgentWingApiKeyRe
     }));
 }
 
-export async function generateApiKey(projectId: string) {
-  const project = (await listProjects()).find((item) => item.projectId === projectId);
+export async function generateApiKey(projectId: string, workspaceId?: string) {
+  const project = (await listProjects(workspaceId)).find((item) => item.projectId === projectId);
   if (!project) {
     throw new Error("Project not found.");
   }
@@ -650,6 +944,7 @@ export async function generateApiKey(projectId: string) {
   const apiKeyId = randomId("key");
   const record: AgentWingApiKeyRecord = {
     apiKeyId,
+    workspaceId: project.workspaceId ?? workspaceId,
     projectId,
     keyPrefix: keyPrefix(apiKey),
     planName: "Beta",
@@ -666,12 +961,13 @@ export async function generateApiKey(projectId: string) {
       await db
         .prepare(
           `INSERT INTO api_keys
-           (api_key, api_key_id, project_id, key_prefix, key_hash, plan_name, action_check_limit, sandbox_run_limit, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (api_key, api_key_id, workspace_id, project_id, key_prefix, key_hash, plan_name, action_check_limit, sandbox_run_limit, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           apiKeyId,
           apiKeyId,
+          record.workspaceId ?? null,
           projectId,
           record.keyPrefix,
           hash,
@@ -724,6 +1020,66 @@ export async function getUsageForApiKey(apiKeyId: string) {
   }
 
   return publicUsage(ensureUsageForKeyFallback(apiKeyId));
+}
+
+export async function getUsageForWorkspace(workspaceId?: string) {
+  const db = await getDb();
+  if (db) {
+    try {
+      await ensureD1DemoKey(db);
+      const statement = workspaceId
+        ? db
+            .prepare(
+              `SELECT
+                 COALESCE(SUM(usage.action_checks_used), 0) AS action_checks_used,
+                 COALESCE(SUM(usage.action_check_limit), 0) AS action_check_limit,
+                 COALESCE(SUM(usage.sandbox_runs_used), 0) AS sandbox_runs_used,
+                 COALESCE(SUM(usage.sandbox_run_limit), 0) AS sandbox_run_limit,
+                 COALESCE(SUM(usage.receipts_created), 0) AS receipts_created
+               FROM usage
+               INNER JOIN api_keys ON api_keys.api_key = usage.api_key
+               WHERE api_keys.workspace_id = ?`,
+            )
+            .bind(workspaceId)
+        : db.prepare(
+            `SELECT
+               COALESCE(SUM(usage.action_checks_used), 0) AS action_checks_used,
+               COALESCE(SUM(usage.action_check_limit), 0) AS action_check_limit,
+               COALESCE(SUM(usage.sandbox_runs_used), 0) AS sandbox_runs_used,
+               COALESCE(SUM(usage.sandbox_run_limit), 0) AS sandbox_run_limit,
+               COALESCE(SUM(usage.receipts_created), 0) AS receipts_created
+             FROM usage
+             INNER JOIN api_keys ON api_keys.api_key = usage.api_key
+             WHERE api_keys.project_id IS NOT NULL`,
+          );
+      const row = await statement.first<UsageRow>();
+      return publicUsage({
+        apiKey: workspaceId ? "workspace" : "all-workspaces",
+        planName: "Beta",
+        actionChecksUsed: row?.action_checks_used ?? 0,
+        actionCheckLimit: row?.action_check_limit || BETA_ACTION_CHECK_LIMIT,
+        sandboxRunsUsed: row?.sandbox_runs_used ?? 0,
+        sandboxRunLimit: row?.sandbox_run_limit || BETA_SANDBOX_RUN_LIMIT,
+        receiptsCreated: row?.receipts_created ?? 0,
+      });
+    } catch (error) {
+      warnD1Fallback("getUsageForWorkspace", error);
+    }
+  }
+
+  const apiKeys = Object.values(getState().apiKeysById).filter(
+    (record) => record.apiKeyId !== DEMO_API_KEY && (!workspaceId || record.workspaceId === workspaceId),
+  );
+  const usageRows = apiKeys.map((record) => ensureUsageForKeyFallback(record.apiKeyId));
+  return publicUsage({
+    apiKey: workspaceId ? "workspace" : "all-workspaces",
+    planName: "Beta",
+    actionChecksUsed: usageRows.reduce((total, usage) => total + usage.actionChecksUsed, 0),
+    actionCheckLimit: usageRows.reduce((total, usage) => total + usage.actionCheckLimit, 0) || BETA_ACTION_CHECK_LIMIT,
+    sandboxRunsUsed: usageRows.reduce((total, usage) => total + usage.sandboxRunsUsed, 0),
+    sandboxRunLimit: usageRows.reduce((total, usage) => total + usage.sandboxRunLimit, 0) || BETA_SANDBOX_RUN_LIMIT,
+    receiptsCreated: usageRows.reduce((total, usage) => total + usage.receiptsCreated, 0),
+  });
 }
 
 export async function incrementActionCheckUsage(apiKeyId: string) {
@@ -784,9 +1140,11 @@ export async function createReceipt(
   action: AgentAction,
   evaluation: PolicyEvaluation,
   apiKeyId?: string,
+  workspaceId?: string,
 ): Promise<ActionReceipt> {
   const receipt: ActionReceipt = {
     receiptId: randomId("aw_receipt"),
+    workspaceId,
     projectId: action.projectId,
     sessionId: action.sessionId,
     agentId: action.agentId,
@@ -815,12 +1173,13 @@ export async function createReceipt(
       await db
         .prepare(
           `INSERT INTO receipts
-           (receipt_id, api_key, project_id, session_id, agent_id, action_type, tool, target, raw_action, decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (receipt_id, api_key, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action, decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           receipt.receiptId,
           apiKeyId ?? null,
+          workspaceId ?? null,
           receipt.projectId ?? null,
           receipt.sessionId ?? null,
           receipt.agentId ?? null,
@@ -873,23 +1232,33 @@ export async function createReceipt(
   return receipt;
 }
 
-export async function listReceipts() {
+export async function listReceipts(workspaceId?: string) {
   const db = await getDb();
   if (db) {
     try {
-      const result = await db
-        .prepare(
-          `SELECT receipt_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
+      const statement = workspaceId
+        ? db
+            .prepare(
+              `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
                   decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
-           FROM receipts
-           ORDER BY created_at DESC
-          LIMIT 500`,
-        )
-        .all<ReceiptRow>();
+               FROM receipts
+               WHERE workspace_id = ?
+               ORDER BY created_at DESC
+               LIMIT 500`,
+            )
+            .bind(workspaceId)
+        : db.prepare(
+            `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
+                  decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
+             FROM receipts
+             ORDER BY created_at DESC
+             LIMIT 500`,
+          );
+      const result = await statement.all<ReceiptRow>();
       const d1Receipts = (result.results ?? []).map(mapReceiptRow);
       const memoryReceipts = getState().receipts.filter(
         (receipt) => !d1Receipts.some((d1Receipt) => d1Receipt.receiptId === receipt.receiptId),
-      );
+      ).filter((receipt) => !workspaceId || receipt.workspaceId === workspaceId);
       return [...memoryReceipts, ...d1Receipts]
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .slice(0, 500);
@@ -899,23 +1268,34 @@ export async function listReceipts() {
     }
   }
 
-  return getState().receipts;
+  return getState().receipts.filter((receipt) => !workspaceId || receipt.workspaceId === workspaceId);
 }
 
-export async function getReceipt(receiptId: string) {
+export async function getReceipt(receiptId: string, workspaceId?: string) {
   const db = await getDb();
-  const memoryReceipt = getState().receipts.find((receipt) => receipt.receiptId === receiptId);
+  const memoryReceipt = getState().receipts.find(
+    (receipt) => receipt.receiptId === receiptId && (!workspaceId || receipt.workspaceId === workspaceId),
+  );
   if (db) {
     try {
-      const row = await db
-        .prepare(
-          `SELECT receipt_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
+      const statement = workspaceId
+        ? db
+            .prepare(
+              `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
                   decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
-           FROM receipts
-           WHERE receipt_id = ?`,
-        )
-        .bind(receiptId)
-        .first<ReceiptRow>();
+               FROM receipts
+               WHERE receipt_id = ? AND workspace_id = ?`,
+            )
+            .bind(receiptId, workspaceId)
+        : db
+            .prepare(
+              `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
+                  decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
+               FROM receipts
+               WHERE receipt_id = ?`,
+            )
+            .bind(receiptId);
+      const row = await statement.first<ReceiptRow>();
       return row ? mapReceiptRow(row) : memoryReceipt;
     } catch (error) {
       warnD1Fallback("getReceipt", error);
@@ -926,11 +1306,11 @@ export async function getReceipt(receiptId: string) {
   return memoryReceipt;
 }
 
-export async function getReceiptStats(): Promise<ReceiptStats> {
+export async function getReceiptStats(workspaceId?: string): Promise<ReceiptStats> {
   const db = await getDb();
   if (db) {
     try {
-      const receipts = await listReceipts();
+      const receipts = await listReceipts(workspaceId);
       return {
         total: receipts.length,
         blocked: receipts.filter((receipt) => receipt.decision === "block").length,
@@ -944,7 +1324,7 @@ export async function getReceiptStats(): Promise<ReceiptStats> {
     }
   }
 
-  const receipts = getState().receipts;
+  const receipts = getState().receipts.filter((receipt) => !workspaceId || receipt.workspaceId === workspaceId);
   return {
     total: receipts.length,
     blocked: receipts.filter((receipt) => receipt.decision === "block").length,
@@ -993,15 +1373,17 @@ export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
   }
 
   const db = await getDb();
+  const workspaceId = workspaceIdFromSandboxOwner(ownerApiKeyId);
   if (db) {
     try {
       await ensureD1DemoKey(db);
       await db
         .prepare(
           `INSERT INTO sandbox_configs
-           (api_key, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
-           VALUES (?, 'e2b_byok', 1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           (api_key, workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
+           VALUES (?, ?, 'e2b_byok', 1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
            ON CONFLICT(api_key) DO UPDATE SET
+             workspace_id = excluded.workspace_id,
              mode = 'e2b_byok',
              e2b_key_saved = 1,
              e2b_key_prefix = excluded.e2b_key_prefix,
@@ -1010,7 +1392,7 @@ export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
              connected_at = COALESCE(sandbox_configs.connected_at, excluded.connected_at),
              updated_at = excluded.updated_at`,
         )
-        .bind(ownerApiKeyId, safeE2BKeyPrefix(trimmed) ?? null, trimmed.slice(-4), await encryptSandboxSecret(trimmed))
+        .bind(ownerApiKeyId, workspaceId ?? null, safeE2BKeyPrefix(trimmed) ?? null, trimmed.slice(-4), await encryptSandboxSecret(trimmed))
         .run();
 
       return getSandboxConfig(ownerApiKeyId);
@@ -1044,19 +1426,21 @@ export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
 
 export async function recordE2BTestResult(status: SandboxTestStatus, ownerApiKeyId = DEMO_API_KEY) {
   const db = await getDb();
+  const workspaceId = workspaceIdFromSandboxOwner(ownerApiKeyId);
   if (db) {
     try {
       await ensureD1DemoKey(db);
       await db
         .prepare(
           `INSERT INTO sandbox_configs
-           (api_key, mode, e2b_key_saved, last_test_status, last_tested_at)
-           VALUES (?, 'none', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           (api_key, workspace_id, mode, e2b_key_saved, last_test_status, last_tested_at)
+           VALUES (?, ?, 'none', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
            ON CONFLICT(api_key) DO UPDATE SET
+             workspace_id = COALESCE(sandbox_configs.workspace_id, excluded.workspace_id),
              last_test_status = excluded.last_test_status,
              last_tested_at = excluded.last_tested_at`,
         )
-        .bind(ownerApiKeyId, status)
+        .bind(ownerApiKeyId, workspaceId ?? null, status)
         .run();
 
       return getSandboxConfig(ownerApiKeyId);
@@ -1079,15 +1463,17 @@ export async function recordE2BTestResult(status: SandboxTestStatus, ownerApiKey
 
 export async function removeE2BKey(ownerApiKeyId = DEMO_API_KEY) {
   const db = await getDb();
+  const workspaceId = workspaceIdFromSandboxOwner(ownerApiKeyId);
   if (db) {
     try {
       await ensureD1DemoKey(db);
       await db
         .prepare(
           `INSERT INTO sandbox_configs
-           (api_key, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
-           VALUES (?, 'none', 0, NULL, NULL, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           (api_key, workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
+           VALUES (?, ?, 'none', 0, NULL, NULL, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
            ON CONFLICT(api_key) DO UPDATE SET
+             workspace_id = excluded.workspace_id,
              mode = 'none',
              e2b_key_saved = 0,
              e2b_key_prefix = NULL,
@@ -1098,7 +1484,7 @@ export async function removeE2BKey(ownerApiKeyId = DEMO_API_KEY) {
              last_tested_at = NULL,
              updated_at = excluded.updated_at`,
         )
-        .bind(ownerApiKeyId)
+        .bind(ownerApiKeyId, workspaceId ?? null)
         .run();
 
       return getSandboxConfig(ownerApiKeyId);
@@ -1142,7 +1528,7 @@ async function getD1E2BApiKey(db: AgentWingD1Database, apiKeyId: string) {
   return decryptSandboxSecret(row.e2b_key_encrypted);
 }
 
-export async function getE2BApiKeyForExecution(apiKeyId = DEMO_API_KEY) {
+export async function getE2BApiKeyForExecution(apiKeyId = DEMO_API_KEY, workspaceId?: string) {
   const db = await getDb();
   let useMemoryFallback = !db;
 
@@ -1151,6 +1537,11 @@ export async function getE2BApiKeyForExecution(apiKeyId = DEMO_API_KEY) {
       await ensureD1DemoKey(db);
       const projectKey = await getD1E2BApiKey(db, apiKeyId);
       if (projectKey) return projectKey;
+
+      if (workspaceId) {
+        const workspaceKey = await getD1E2BApiKey(db, sandboxOwnerKeyForWorkspace(workspaceId));
+        if (workspaceKey) return workspaceKey;
+      }
 
       if (apiKeyId !== DEMO_API_KEY) {
         const demoKey = await getD1E2BApiKey(db, DEMO_API_KEY);

@@ -5,9 +5,20 @@ export function AdminAccessScreen({ error }: { error?: string }) {
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200">AgentWing Console</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-white">Admin access required</h1>
         <p className="mt-3 text-sm leading-6 text-slate-400">
-          Enter the server-side admin access code to open the dashboard. Public docs, landing, and Runtime Lab remain available.
+          Sign in with Google to create your workspace. The server-side admin access code remains available as a fallback.
         </p>
-        <form action="/api/admin/access" method="post" className="mt-5 space-y-3">
+        <a
+          href="/api/auth/signin/google"
+          className="mt-5 flex min-h-11 w-full items-center justify-center rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200"
+        >
+          Sign in with Google
+        </a>
+        <div className="my-5 flex items-center gap-3 text-xs text-slate-500">
+          <span className="h-px flex-1 bg-white/[0.08]" />
+          Admin fallback
+          <span className="h-px flex-1 bg-white/[0.08]" />
+        </div>
+        <form action="/api/admin/access" method="post" className="space-y-3">
           <label htmlFor="access-code" className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
             Access code
           </label>
@@ -21,9 +32,9 @@ export function AdminAccessScreen({ error }: { error?: string }) {
           {error && <p className="rounded border border-red-400/20 bg-red-400/[0.08] px-3 py-2 text-sm text-red-100">{error}</p>}
           <button
             type="submit"
-            className="w-full rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200"
+            className="w-full rounded-md border border-white/[0.12] bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-white/[0.07]"
           >
-            Continue
+            Continue as admin
           </button>
         </form>
       </section>

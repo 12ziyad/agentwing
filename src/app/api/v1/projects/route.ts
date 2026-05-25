@@ -1,18 +1,20 @@
 import { createProject, listProjects } from "@/lib/agentwingStore";
-import { adminRequiredResponse, isAdminRequest } from "@/lib/adminAccess";
+import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+  const auth = await getDashboardAuth(request);
+  if (!auth) return authRequiredResponse();
 
   return Response.json({
-    projects: await listProjects(),
+    projects: await listProjects(auth.workspaceId),
   });
 }
 
 export async function POST(request: Request) {
-  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+  const auth = await getDashboardAuth(request);
+  if (!auth) return authRequiredResponse();
 
   let body: unknown;
 
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
   const name = body && typeof body === "object" && "name" in body && typeof body.name === "string" ? body.name : "";
 
   try {
-    const project = await createProject(name);
+    const project = await createProject(name, auth.workspaceId);
     return Response.json({ project }, { status: 201 });
   } catch (error) {
     return Response.json(

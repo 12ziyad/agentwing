@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   const evaluation: PolicyEvaluation =
     evaluateAgentAction(action);
-  const receipt = await createReceipt(action, evaluation, auth.apiKeyId);
+  const receipt = await createReceipt(action, evaluation, auth.apiKeyId, auth.workspaceId);
 
   return Response.json({
     decision: evaluation.decision,

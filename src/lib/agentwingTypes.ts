@@ -49,6 +49,7 @@ export type PolicyEvaluation = {
 
 export type ActionReceipt = {
   receiptId: string;
+  workspaceId?: string;
   projectId?: string;
   sessionId?: string;
   agentId?: string;
@@ -90,12 +91,14 @@ export type ApiKeyUsage = {
 
 export type AgentWingProject = {
   projectId: string;
+  workspaceId?: string;
   name: string;
   createdAt: string;
 };
 
 export type AgentWingApiKeyRecord = {
   apiKeyId: string;
+  workspaceId?: string;
   projectId?: string;
   keyPrefix: string;
   planName: string;
@@ -126,3 +129,33 @@ export type SandboxProviderConfig = {
   e2bKeyLast4?: string;
   e2bKeyUpdatedAt?: string;
 };
+
+export type AgentWingUser = {
+  userId: string;
+  email: string;
+  name?: string;
+  image?: string;
+  provider: "google";
+  providerAccountId: string;
+  createdAt: string;
+  lastLoginAt: string;
+};
+
+export type AgentWingWorkspace = {
+  workspaceId: string;
+  name: string;
+  ownerUserId: string;
+  createdAt: string;
+};
+
+export type DashboardAuthContext =
+  | {
+      mode: "user";
+      user: AgentWingUser;
+      workspace: AgentWingWorkspace;
+      workspaceId: string;
+    }
+  | {
+      mode: "admin";
+      workspaceId?: undefined;
+    };

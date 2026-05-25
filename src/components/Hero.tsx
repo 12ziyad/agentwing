@@ -1,6 +1,5 @@
 "use client";
 
-import { EARLY_ACCESS_MAILTO } from "@/lib/accessMail";
 import { Mascot } from "./Mascot";
 
 type HeroProps = {
@@ -62,7 +61,7 @@ const COMPARISON = [
 export function Hero({ onStart }: HeroProps) {
   return (
     <main className="min-h-screen bg-[#05070d] text-slate-100">
-      <LandingNav onStart={onStart} />
+      <LandingNav />
       <HeroSection onStart={onStart} />
       <WhatAgentWingIs />
       <WhyTeamsNeedIt />
@@ -75,7 +74,7 @@ export function Hero({ onStart }: HeroProps) {
   );
 }
 
-function LandingNav({ onStart }: { onStart: () => void }) {
+function LandingNav() {
   return (
     <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#05070d]/92 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
@@ -92,13 +91,12 @@ function LandingNav({ onStart }: { onStart: () => void }) {
             </a>
           ))}
         </nav>
-        <button
-          type="button"
-          onClick={onStart}
+        <a
+          href="/dashboard"
           className="rounded-md border border-cyan-300/30 bg-cyan-300 px-3.5 py-2 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200 active:scale-[0.99]"
         >
-          Test AgentWing
-        </button>
+          Open dashboard
+        </a>
       </div>
     </header>
   );
@@ -127,18 +125,30 @@ function HeroSection({ onStart }: { onStart: () => void }) {
             allowed to happen between them.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
+            <a
+              href="/api/auth/signin/google"
+              className="rounded-md border border-cyan-300/30 bg-cyan-300 px-5 py-3 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200 active:scale-[0.99]"
+            >
+              Start free
+            </a>
+            <a
+              href="/api/auth/signin/google"
+              className="rounded-md border border-white/[0.12] bg-white/[0.04] px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/[0.2] hover:bg-white/[0.07]"
+            >
+              Sign in with Google
+            </a>
             <button
               type="button"
               onClick={onStart}
-              className="rounded-md border border-cyan-300/30 bg-cyan-300 px-5 py-3 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200 active:scale-[0.99]"
-            >
-              Test AgentWing
-            </button>
-            <a
-              href="#how-it-works"
               className="rounded-md border border-white/[0.12] bg-white/[0.04] px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/[0.2] hover:bg-white/[0.07]"
             >
-              How it works
+              Try Runtime Lab
+            </button>
+            <a
+              href="/docs"
+              className="rounded-md border border-white/[0.12] bg-white/[0.04] px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/[0.2] hover:bg-white/[0.07]"
+            >
+              View docs
             </a>
           </div>
         </div>
@@ -380,30 +390,42 @@ function ContactSection() {
       <div className="mx-auto grid max-w-7xl gap-8 rounded-2xl border border-white/[0.08] bg-[#080b12] p-6 sm:p-8 lg:grid-cols-[1fr_0.7fr]">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
-            Early access
+            Self-serve beta
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Building agents that touch real systems?
           </h2>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-            Early access is open for the first 20 serious builders and teams
-            working on coding agents, ops agents, or autonomous workflows.
+            Start free with Google, create a project, generate an AgentWing API key,
+            and connect your own E2B sandbox when you are ready to run real actions.
           </p>
           <div className="mt-5 w-fit rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2 text-sm font-semibold text-cyan-100">
-            First 20 serious builders get free early access.
+            Your dashboard, projects, API keys, usage, receipts, and sandbox config are user-scoped.
           </div>
           <div className="mt-5 text-sm leading-6 text-slate-300">
-            <p>For early access, bugs, reports, product enquiries, or demos:</p>
+            <p>For bugs, reports, product enquiries, or demos:</p>
             <p className="mt-1 font-mono text-cyan-100">founder@gpmai.dev</p>
             <p className="font-mono text-cyan-100">ziyad@gpmai.dev</p>
           </div>
         </div>
-        <div className="flex items-center rounded-xl border border-white/[0.08] bg-[#05070d] p-4">
+        <div className="flex flex-col justify-center gap-3 rounded-xl border border-white/[0.08] bg-[#05070d] p-4">
           <a
-            href={EARLY_ACCESS_MAILTO}
+            href="/api/auth/signin/google"
             className="w-full rounded-md border border-cyan-300/30 bg-cyan-300 px-4 py-3 text-center text-sm font-semibold text-[#031018] transition hover:bg-cyan-200 active:scale-[0.99]"
           >
-            Request early access
+            Start free
+          </a>
+          <a
+            href="/dashboard"
+            className="w-full rounded-md border border-white/[0.1] bg-white/[0.04] px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:bg-white/[0.07]"
+          >
+            Open dashboard
+          </a>
+          <a
+            href="/runtime-lab"
+            className="w-full rounded-md border border-white/[0.1] bg-white/[0.04] px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:bg-white/[0.07]"
+          >
+            Try Runtime Lab
           </a>
         </div>
       </div>

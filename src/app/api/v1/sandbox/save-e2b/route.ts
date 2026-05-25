@@ -1,10 +1,11 @@
-import { saveE2BKey } from "@/lib/agentwingStore";
-import { adminRequiredResponse, isAdminRequest } from "@/lib/adminAccess";
+import { saveE2BKey, sandboxOwnerKeyForWorkspace } from "@/lib/agentwingStore";
+import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (!(await isAdminRequest(request))) return adminRequiredResponse();
+  const auth = await getDashboardAuth(request);
+  if (!auth) return authRequiredResponse();
 
   let body: unknown;
 
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
       : "";
 
   try {
-    const sandbox = await saveE2BKey(apiKey);
+    const sandbox = await saveE2BKey(apiKey, sandboxOwnerKeyForWorkspace(auth.workspaceId));
     return Response.json({
       ok: true,
       sandbox,

@@ -12,6 +12,7 @@ import {
   ReceiptText,
   ShieldCheck,
 } from "lucide-react";
+import type { DashboardAuthContext } from "@/lib/agentwingTypes";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -23,8 +24,10 @@ const navItems = [
   { href: "/dashboard/usage", label: "Usage", icon: Gauge },
 ];
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({ children, auth }: { children: React.ReactNode; auth: DashboardAuthContext }) {
   const pathname = usePathname();
+  const user = auth.mode === "user" ? auth.user : undefined;
+  const workspace = auth.mode === "user" ? auth.workspace : undefined;
 
   return (
     <main className="min-h-screen bg-[#05070d] text-slate-100">
@@ -72,9 +75,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-white">AgentWing Console</p>
-                <p className="text-xs text-slate-400">API-first control plane for agent tool execution</p>
+                <p className="text-xs text-slate-400">
+                  {workspace ? workspace.name : "Admin mode"} - API-first control plane for agent tool execution
+                </p>
               </div>
               <div className="flex items-center gap-2">
+                <div className="hidden items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-1.5 sm:flex">
+                  {user?.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.image} alt="" className="size-6 rounded-full" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="flex size-6 items-center justify-center rounded-full bg-cyan-300 text-xs font-semibold text-[#031018]">
+                      {user?.email?.[0]?.toUpperCase() ?? "A"}
+                    </span>
+                  )}
+                  <span className="max-w-44 truncate text-xs font-medium text-slate-200">
+                    {user?.email ?? "Admin fallback"}
+                  </span>
+                </div>
                 <Link
                   href="/docs"
                   className="inline-flex items-center gap-2 rounded-md border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/[0.07]"
@@ -88,6 +106,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 >
                   Runtime Lab
                 </Link>
+                <form action="/api/auth/signout" method="post">
+                  <button
+                    type="submit"
+                    className="rounded-md border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/[0.07]"
+                  >
+                    Sign out
+                  </button>
+                </form>
               </div>
             </div>
           </header>

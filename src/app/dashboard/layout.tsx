@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { AdminAccessScreen } from "@/components/dashboard/AdminAccessScreen";
-import { ADMIN_COOKIE_NAME, getAdminAccessCode, hashAdminAccessCode } from "@/lib/adminAccess";
+import { getAdminAccessCode } from "@/lib/adminAccess";
+import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
 
 export default async function DashboardLayout({
   children,
@@ -10,10 +11,13 @@ export default async function DashboardLayout({
 }) {
   const accessCode = getAdminAccessCode();
   const cookieStore = await cookies();
-  const cookieValue = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
-  const authenticated = accessCode ? cookieValue === (await hashAdminAccessCode(accessCode)) : false;
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((cookie) => `${cookie.name}=${encodeURIComponent(cookie.value)}`)
+    .join("; ");
+  const auth = await getDashboardAuthFromCookieHeader(cookieHeader);
 
-  if (!authenticated) {
+  if (!auth) {
     return (
       <AdminAccessScreen
         error={
@@ -25,5 +29,5 @@ export default async function DashboardLayout({
     );
   }
 
-  return <DashboardShell>{children}</DashboardShell>;
+  return <DashboardShell auth={auth}>{children}</DashboardShell>;
 }
