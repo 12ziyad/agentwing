@@ -3,12 +3,20 @@ import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+function isSandboxSecretConfigured() {
+  const secret = process.env.AGENTWING_SANDBOX_SECRET ?? process.env.AGENTWING_SECRET_KEY;
+  if (secret) return true;
+  if (process.env.NODE_ENV !== "production") return true;
+  return false;
+}
+
 export async function GET(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
   return Response.json({
     sandbox: await getSandboxConfig(sandboxOwnerKeyForWorkspace(auth.workspaceId)),
+    secretMissing: !isSandboxSecretConfigured(),
   });
 }
 

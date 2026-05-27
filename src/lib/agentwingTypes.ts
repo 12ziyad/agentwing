@@ -2,11 +2,18 @@ export const actionTypes = [
   "file_access",
   "shell_command",
   "api_call",
+  "network_request",
   "browser_action",
   "database_query",
+  "database_operation",
   "message_send",
   "payment_action",
   "deploy_action",
+  "git_operation",
+  "package_install",
+  "code_execution",
+  "config_change",
+  "agent_spawn",
   "custom_action",
 ] as const;
 
@@ -19,7 +26,26 @@ export type AgentWingDecision =
   | "sandbox_required"
   | "restore_point_required";
 
-export type AgentWingRisk = "low" | "medium" | "high";
+export type AgentWingRisk = "low" | "medium" | "high" | "critical";
+
+export type CustomPolicy = {
+  policyId: string;
+  workspaceId: string;
+  projectId?: string;
+  name: string;
+  description?: string;
+  actionType?: string;
+  tool?: string;
+  targetPattern?: string;
+  commandPattern?: string;
+  decision: AgentWingDecision;
+  risk: AgentWingRisk;
+  priority: number;
+  enabled: boolean;
+  feedback?: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type AgentAction = {
   projectId?: string;
@@ -106,6 +132,7 @@ export type AgentWingApiKeyRecord = {
   sandboxRunLimit: number;
   createdAt: string;
   lastUsedAt?: string;
+  revokedAt?: string;
 };
 
 export type SandboxMode = "none" | "e2b_byok" | "custom_http" | "managed_soon";
@@ -137,6 +164,9 @@ export type AgentWingUser = {
   image?: string;
   provider: "google";
   providerAccountId: string;
+  status?: "active" | "deletion_requested" | "deleted";
+  deleteRequestedAt?: string;
+  deletedAt?: string;
   createdAt: string;
   lastLoginAt: string;
 };
@@ -145,6 +175,9 @@ export type AgentWingWorkspace = {
   workspaceId: string;
   name: string;
   ownerUserId: string;
+  status?: "active" | "deletion_requested" | "deleted";
+  deleteRequestedAt?: string;
+  deletedAt?: string;
   createdAt: string;
 };
 

@@ -1,110 +1,77 @@
 import Link from "next/link";
 
-const fetchExample = `const response = await fetch("https://your-agentwing-host.com/api/v1/check-action", {
+const curlExample = `curl -X POST https://agentwing.gpmai.dev/api/v1/check-action \\
+  -H "Authorization: Bearer AW_LIVE_KEY_HERE" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "projectId": "YOUR_PROJECT_ID",
+    "sessionId": "live-test",
+    "agentId": "test-agent",
+    "actionType": "file_access",
+    "tool": "filesystem",
+    "target": ".env",
+    "description": "Read .env file"
+  }'`;
+
+const psExample = `$headers = @{
+  "Authorization" = "Bearer AW_LIVE_KEY_HERE"
+  "Content-Type"  = "application/json"
+}
+$body = @{
+  projectId  = "YOUR_PROJECT_ID"
+  sessionId  = "live-test"
+  agentId    = "test-agent"
+  actionType = "file_access"
+  tool       = "filesystem"
+  target     = ".env"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST \\
+  -Uri "https://agentwing.gpmai.dev/api/v1/check-action" \\
+  -Headers $headers -Body $body`;
+
+const fetchExample = `const response = await fetch("https://agentwing.gpmai.dev/api/v1/check-action", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    Authorization: \`Bearer \${process.env.AGENTWING_API_KEY}\`
+    Authorization: \`Bearer \${process.env.AGENTWING_API_KEY}\`,
   },
   body: JSON.stringify({
-    projectId: "proj_live",
+    projectId: "YOUR_PROJECT_ID",
     sessionId: "sess_123",
     agentId: "agent_coder",
-    actionType: "shell_command",
-    tool: "terminal",
-    command: "npm test",
-    description: "Run the project test suite before writing files"
-  })
+    actionType: "file_access",
+    tool: "filesystem",
+    target: ".env",
+    description: "Read .env file",
+  }),
 });
 
-const decision = await response.json();`;
+const { decision, risk, policy, feedback, receiptId } = await response.json();
+// decision: "block"
+// risk: "high"
+// policy: "block-secret-file-access"`;
 
-const usageExample = `const usage = await fetch("https://your-agentwing-host.com/api/v1/usage", {
-  headers: {
-    Authorization: \`Bearer \${process.env.AGENTWING_API_KEY}\`
-  }
-}).then((response) => response.json());`;
+const responseExample = `{
+  "decision": "block",
+  "risk": "high",
+  "policy": "block-secret-file-access",
+  "feedback": "Secret-bearing files such as .env are blocked before contents can be exposed.",
+  "receiptId": "aw_receipt_..."
+}`;
 
-const sandboxRunExample = `const sandboxResult = await fetch("https://your-agentwing-host.com/api/v1/sandbox/run", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: \`Bearer \${process.env.AGENTWING_API_KEY}\`
-  },
-  body: JSON.stringify({
-    projectId: "proj_live",
-    sessionId: "sess_123",
-    agentId: "agent_coder",
-    provider: "e2b",
-    action: {
-      actionType: "shell_command",
-      tool: "terminal",
-      target: "e2b sandbox",
-      command: "node -e \\"console.log('hello from AgentWing sandbox')\\"",
-      description: "Run command in an E2B BYOK sandbox"
-    }
-  })
-}).then((response) => response.json());`;
-
-const createProjectExample = `const { project } = await fetch("https://your-agentwing-host.com/api/v1/projects", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ name: "Production Coding Agent" })
-}).then((response) => response.json());`;
-
-const generateKeyExample = `const { apiKey } = await fetch("https://your-agentwing-host.com/api/v1/api-keys", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ projectId: project.projectId })
-}).then((response) => response.json());
-
-// Store this securely. AgentWing only shows the full key once.`;
-
-const d1Commands = `wrangler d1 create agentwing_v1
-
-# Put the returned database_id into wrangler.jsonc:
-# binding = AGENTWING_DB
-# database_name = agentwing_v1
-
-wrangler d1 migrations apply agentwing_v1 --local
-wrangler d1 migrations apply agentwing_v1 --remote`;
-
-const sandboxSecretCommands = `# Required when storing usable BYOK sandbox keys in D1
-wrangler secret put AGENTWING_SANDBOX_SECRET
-
-# Optional server-level E2B fallback key
-wrangler secret put E2B_API_KEY`;
-
-const sdkExample = `import { AgentWing } from "@agentwing/sdk";
-
-const agentwing = new AgentWing({
-  apiKey: process.env.AGENTWING_API_KEY!, // local/dev: aw_live_demo_key
-  baseUrl: "https://your-agentwing-host.com"
-});
-
-const result = await agentwing.checkAction({
-  projectId: "proj_live",
-  sessionId: "sess_123",
-  agentId: "agent_coder",
-  actionType: "file_access",
-  tool: "fs.writeFile",
-  target: "src/App.tsx",
-  description: "Update application copy",
-  metadata: { operation: "write" }
-});`;
-
-const guardExample = `await agentwing.guardAction({
-  action: {
-    projectId: "proj_live",
-    sessionId: "sess_123",
-    agentId: "agent_coder",
-    actionType: "api_call",
-    tool: "github",
-    target: "GET /repos/acme/app/issues",
-    description: "Read issues before planning work"
-  },
-  execute: () => github.rest.issues.listForRepo(params)
-});`;
+const customPolicyExample = `// Create a policy via dashboard /dashboard/policies
+// or via API (authenticated dashboard session):
+POST /api/v1/policies
+{
+  "name": "Block rm -rf",
+  "actionType": "shell_command",
+  "commandPattern": "rm -rf*",
+  "decision": "block",
+  "risk": "critical",
+  "priority": 5,
+  "feedback": "rm -rf is blocked unconditionally."
+}`;
 
 export default function DocsPage() {
   return (
@@ -115,75 +82,75 @@ export default function DocsPage() {
             AgentWing
           </Link>
           <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="rounded-md border border-white/[0.1] px-3 py-2 text-xs font-semibold text-slate-200">
+            <Link href="/dashboard" className="rounded-md border border-white/[0.1] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:text-white">
               Dashboard
             </Link>
-            <Link href="/runtime-lab" className="rounded-md border border-cyan-300/25 bg-cyan-300 px-3 py-2 text-xs font-semibold text-[#031018]">
-              Runtime Lab
-            </Link>
+            <a href="/api/auth/signin/google?next=/dashboard" className="rounded-md border border-cyan-300/25 bg-cyan-300 px-3 py-2 text-xs font-semibold text-[#031018]">
+              Sign up free
+            </a>
           </div>
         </div>
       </header>
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">API and SDK</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">Documentation</p>
         <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-white">
-          Universal runtime control for AI agent actions
+          AgentWing — Runtime control layer for AI agents
         </h1>
         <p className="mt-5 max-w-3xl text-base leading-7 text-slate-300">
-          Put AgentWing before your agent tools. It checks proposed actions and returns allow, block,
-          approval_required, sandbox_required, or restore_point_required with feedback and an audit receipt.
-        </p>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          Authenticate API requests with <span className="font-mono text-cyan-100">Authorization: Bearer &lt;key&gt;</span>.
-          Local development includes <span className="font-mono text-cyan-100">aw_live_demo_key</span> on the Beta plan.
-          Project and API key management endpoints are intended for authenticated dashboard/admin sessions.
+          Policy, approval, sandbox routing, restore points, feedback, and audit receipts before agent actions execute.
         </p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
-          {["Policy", "Approval", "Sandbox routing", "Restore points", "Feedback", "Audit receipts"].map((item) => (
+          {["Policy checks", "Approval gates", "Sandbox routing", "Restore points", "Structured feedback", "Audit receipts"].map((item) => (
             <div key={item} className="rounded-md border border-white/[0.08] bg-[#080b12] p-4 text-sm font-semibold text-white">
               {item}
             </div>
           ))}
         </div>
 
-        <DocSection title="Install" code="npm install @agentwing/sdk" />
-        <DocSection title="Create a project" code={createProjectExample} />
-        <DocSection title="Generate an API key" code={generateKeyExample} />
-        <DocSection title="Create a client" code={sdkExample} />
-        <DocSection title="Guard tool execution" code={guardExample} />
-        <DocSection title="Use the HTTP API" code={fetchExample} />
-        <DocSection title="Run sandbox-required action" code={sandboxRunExample} />
-        <DocSection title="Check usage balance" code={usageExample} />
-        <DocSection title="Cloudflare D1 persistence" code={d1Commands} />
-        <DocSection title="Sandbox secrets" code={sandboxSecretCommands} />
-
-        <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <h2 className="text-xl font-semibold text-white">Persistent storage</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            Bind a Cloudflare D1 database as AGENTWING_DB to persist api_keys, usage, receipts, and sandbox_configs.
-            If the binding is unavailable, AgentWing keeps a local in-memory development fallback so Runtime Lab and
-            dashboard flows still work.
+        <DocSection title="1. Sign up free">
+          <p className="text-sm leading-6 text-slate-300">
+            Sign up at{" "}
+            <a href="https://agentwing.gpmai.dev" className="font-mono text-cyan-100 underline">agentwing.gpmai.dev</a>{" "}
+            using Google. No password needed — click <strong className="text-white">Continue with Google</strong>.
+            Your workspace, projects, API keys, receipts, and sandbox config are all user-scoped.
           </p>
-        </section>
+        </DocSection>
 
-        <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <h2 className="text-xl font-semibold text-white">AgentAction schema</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            Send projectId, sessionId, agentId, actionType, tool, target, command, description, and metadata.
-            Supported action types are file_access, shell_command, api_call, browser_action, database_query,
-            message_send, payment_action, deploy_action, and custom_action.
+        <DocSection title="2. Create a project">
+          <p className="text-sm leading-6 text-slate-300">
+            Go to <Link href="/dashboard/projects" className="font-mono text-cyan-100">Dashboard → Projects</Link> and create a project.
+            Projects scope your API keys, policies, receipts, and usage.
           </p>
-        </section>
+        </DocSection>
 
-        <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <h2 className="text-xl font-semibold text-white">Decisions</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <DocSection title="3. Generate an API key">
+          <p className="text-sm leading-6 text-slate-300">
+            Go to <Link href="/dashboard/api-keys" className="font-mono text-cyan-100">Dashboard → API Keys</Link>, select a project, and click Generate key.
+            Copy the full key immediately — it is only shown once. Existing keys show only a masked prefix.
+          </p>
+          <div className="mt-3 rounded border border-amber-300/20 bg-amber-300/[0.04] px-3 py-2 text-xs text-amber-100">
+            Security: API keys are stored as a SHA-256 hash. The full key is never stored or retrievable after generation.
+          </div>
+        </DocSection>
+
+        <DocSection title="4. Call /api/v1/check-action">
+          <p className="mb-4 text-sm leading-6 text-slate-300">
+            Before executing any agent tool call, send the proposed action to AgentWing. The response tells you what to do.
+          </p>
+          <CodeBlock label="cURL" code={curlExample} />
+          <CodeBlock label="PowerShell" code={psExample} />
+          <CodeBlock label="JavaScript fetch" code={fetchExample} />
+          <CodeBlock label="Expected response" code={responseExample} />
+        </DocSection>
+
+        <DocSection title="5. Decision values">
+          <div className="grid gap-3 md:grid-cols-2">
             {[
-              ["allow", "The action is low risk and can execute."],
-              ["block", "The action is denied, such as secret access or force push."],
+              ["allow", "The action is low risk and can execute immediately."],
+              ["block", "The action is denied — e.g., secret file access, force push."],
               ["approval_required", "A human should approve before the action executes."],
-              ["sandbox_required", "Run the action in an isolated sandbox before continuing."],
+              ["sandbox_required", "Run the action in an isolated sandbox first."],
               ["restore_point_required", "Create a restore point before mutating files or state."],
             ].map(([decision, copy]) => (
               <div key={decision} className="rounded border border-white/[0.08] bg-[#05070d] p-3">
@@ -192,32 +159,89 @@ export default function DocsPage() {
               </div>
             ))}
           </div>
-        </section>
+        </DocSection>
 
-        <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <h2 className="text-xl font-semibold text-white">Sandbox modes</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            E2B BYOK lets teams connect their own E2B account and keep sandbox credentials server-side. Custom HTTP
-            sandboxes are planned for teams with their own runner. AgentWing Managed Sandbox is coming later and is not
-            enabled in this V1 build.
+        <DocSection title="6. Custom policies">
+          <p className="mb-4 text-sm leading-6 text-slate-300">
+            Go to <Link href="/dashboard/policies" className="font-mono text-cyan-100">Dashboard → Policies</Link> to create project-specific policies.
+            Critical default safety blocks run first. Custom policies then match before the remaining AgentWing ruleset.
+            Use priority (lower = first) to control custom policy order.
           </p>
-          <p className="mt-3 text-sm leading-6 text-slate-400">
-            Customers do not install the E2B SDK or write E2B code. They call AgentWing with their AgentWing API key;
-            AgentWing uses the saved BYOK key server-side when a policy requires sandbox execution.
+          <p className="mb-3 text-sm text-slate-300">Matching: empty field = match any. Target and command patterns support <code className="font-mono text-cyan-100">*</code> wildcards.</p>
+          <CodeBlock label="Example — create via API" code={customPolicyExample} />
+        </DocSection>
+
+        <DocSection title="7. Connect E2B BYOK sandbox">
+          <p className="text-sm leading-6 text-slate-300">
+            Go to <Link href="/dashboard/sandboxes" className="font-mono text-cyan-100">Dashboard → Sandboxes</Link> and paste your E2B API key.
+            The key is stored encrypted server-side using AES-GCM with your configured{" "}
+            <code className="font-mono text-cyan-100">AGENTWING_SANDBOX_SECRET</code>.
+            It is never returned to the browser.
           </p>
-        </section>
+          <div className="mt-3 space-y-2 text-sm text-slate-300">
+            <p>When <code className="font-mono text-cyan-100">sandbox_required</code> is returned, AgentWing will use your saved key to run the action in E2B.</p>
+            <p>Use <strong className="text-white">Test connection</strong> to verify the key works.</p>
+          </div>
+        </DocSection>
+
+        <DocSection title="8. Receipts and usage">
+          <p className="text-sm leading-6 text-slate-300">
+            Every <code className="font-mono text-cyan-100">/api/v1/check-action</code> call creates an audit receipt.
+            Go to <Link href="/dashboard/receipts" className="font-mono text-cyan-100">Dashboard → Receipts</Link> to view them.
+            Click any receipt for the full decision detail, sandbox output, and metadata.
+            <br />
+            <Link href="/dashboard/usage" className="font-mono text-cyan-100">Dashboard → Usage</Link> shows workspace-level counters for action checks, sandbox runs, and receipts.
+          </p>
+        </DocSection>
+
+        <DocSection title="9. Security notes">
+          <ul className="space-y-2 text-sm leading-6 text-slate-300">
+            <li>• API keys are shown once and stored as a SHA-256 hash. They cannot be retrieved after generation.</li>
+
+            <li>• E2B keys are encrypted server-side with AES-GCM. The raw key is never returned to the browser.</li>
+            <li>• AgentWing never exposes secrets in API responses or logs.</li>
+            <li>• Each user&apos;s data is scoped to their workspace — users cannot access other workspaces.</li>
+            <li>• The admin console requires a verified admin email set in <code className="font-mono text-cyan-100">ADMIN_EMAILS</code>.</li>
+            <li>• Authentication is Google OAuth only. No password is stored.</li>
+          </ul>
+        </DocSection>
+
+        <DocSection title="10. Required secrets (Cloudflare)">
+          <p className="mb-3 text-sm text-slate-300">Set these via <code className="font-mono text-cyan-100">wrangler secret put &lt;NAME&gt;</code>:</p>
+          <div className="space-y-2">
+            {[
+              ["GOOGLE_CLIENT_ID", "Google OAuth client ID"],
+              ["GOOGLE_CLIENT_SECRET", "Google OAuth client secret"],
+              ["AUTH_URL", "Your production URL, e.g. https://agentwing.gpmai.dev"],
+              ["AGENTWING_SANDBOX_SECRET", "Random 32-byte base64 secret for E2B key encryption"],
+              ["ADMIN_EMAILS", "Comma-separated admin emails, e.g. you@example.com"],
+            ].map(([name, desc]) => (
+              <div key={name} className="flex gap-3 rounded border border-white/[0.08] bg-[#05070d] px-3 py-2">
+                <code className="font-mono text-xs text-cyan-100">{name}</code>
+                <span className="text-xs text-slate-400">{desc}</span>
+              </div>
+            ))}
+          </div>
+        </DocSection>
       </section>
     </main>
   );
 }
 
-function DocSection({ title, code }: { title: string; code: string }) {
+function DocSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-      <h2 className="text-xl font-semibold text-white">{title}</h2>
-      <pre className="mt-4 overflow-x-auto rounded-md border border-white/[0.08] bg-[#05070d] p-4 text-sm leading-6 text-slate-300">
-        {code}
-      </pre>
+      <h2 className="text-lg font-semibold text-white">{title}</h2>
+      <div className="mt-4">{children}</div>
     </section>
+  );
+}
+
+function CodeBlock({ label, code }: { label: string; code: string }) {
+  return (
+    <div className="mb-4">
+      <p className="mb-2 text-xs font-semibold text-slate-500">{label}</p>
+      <pre className="overflow-x-auto rounded-md border border-white/[0.08] bg-[#05070d] p-4 text-xs leading-6 text-slate-300">{code}</pre>
+    </div>
   );
 }

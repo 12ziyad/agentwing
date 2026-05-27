@@ -1,4 +1,4 @@
-import { generateApiKey, listApiKeys } from "@/lib/agentwingStore";
+import { generateApiKey, listApiKeys, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -34,6 +34,12 @@ export async function POST(request: Request) {
 
   try {
     const result = await generateApiKey(projectId, auth.workspaceId);
+    await trackEvent("api_key_created", {
+      workspaceId: auth.workspaceId,
+      userId: auth.mode === "user" ? auth.user.userId : undefined,
+      projectId,
+      metadata: { apiKeyId: result.record.apiKeyId, keyPrefix: result.record.keyPrefix },
+    });
     return Response.json(
       {
         apiKey: result.apiKey,

@@ -1,457 +1,217 @@
 "use client";
 
-import { Mascot } from "./Mascot";
+import Link from "next/link";
+import { PublicNav, PublicFooter } from "@/components/PublicLayout";
 
-type HeroProps = {
-  onStart: () => void;
-};
-
-const NAV_ITEMS = [
-  ["How it works", "#how-it-works"],
-  ["Sandbox Shelf", "#sandbox-shelf"],
-  ["Contact", "#contact"],
+const controlFlow = [
+  { label: "Agent proposes action", sub: "file_access · shell_command · network_call · …" },
+  { label: "Policy check", sub: "Custom policies · Default ruleset" },
+  { label: "Decision engine", sub: "block · approval_required · sandbox_required · allow" },
+  { label: "Audit receipt sealed", sub: "Risk · policy · feedback · receiptId" },
 ];
 
-const WHAT_CARDS = [
-  ["Intercept tool calls", "Inspect file, shell, API, sandbox, and deploy actions before execution."],
-  ["Apply policy", "Decide what is allowed, blocked, redirected, sandboxed, or approval-gated."],
-  ["Create Restore Points", "Capture reversible file state before controlled writes."],
-  ["Route to sandbox", "Send risky commands to E2B, Daytona, Modal, Vercel, or custom providers."],
-  ["Return feedback", "Give the agent structured guidance so it can re-plan safely."],
-  ["Seal audit receipt", "Record the decision, risk, policy, feedback, and rollback context."],
+const decisions = [
+  { d: "allow", cls: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100" },
+  { d: "block", cls: "border-red-300/25 bg-red-400/[0.08] text-red-100" },
+  { d: "approval_required", cls: "border-amber-300/25 bg-amber-300/[0.06] text-amber-100" },
+  { d: "sandbox_required", cls: "border-cyan-300/25 bg-cyan-300/[0.06] text-cyan-100" },
+  { d: "restore_point_required", cls: "border-violet-300/25 bg-violet-300/[0.06] text-violet-100" },
 ];
 
-const PAIN_CARDS = [
-  ["Secret access", "Blocked"],
-  ["Shell commands", "Sandboxed"],
-  ["Git operations", "Approval-gated"],
-  ["Deploys", "Approval-gated"],
-  ["API calls", "Audited"],
-  ["Database changes", "Feedback returned"],
+const features = [
+  { title: "Policy checks", body: "Critical safety blocks run first. Custom policies then match before the remaining default ruleset, with wildcard patterns and per-project scope." },
+  { title: "Approval gates", body: "Route any action through a human-in-the-loop approval. Agents pause and wait. You approve or reject from the dashboard." },
+  { title: "BYOK Sandbox routing", body: "Bring your own E2B API key. Unsafe actions are routed to isolated execution before touching production." },
+  { title: "Restore points", body: "Before mutating files, state, or config, AgentWing signals the agent to create a checkpoint first." },
+  { title: "Structured feedback", body: "Every decision includes human-readable feedback and a next step the agent can use to re-plan." },
+  { title: "Audit receipts", body: "Every check-action call creates a receipt: decision, risk, policy, action metadata — scoped to your workspace." },
 ];
 
-const FLOW = [
-  "Agent proposes action",
-  "AgentWing checks policy",
-  "Restore Point captured",
-  "Sandbox replay or approval gate",
-  "Feedback returned to agent",
-  "Audit receipt sealed",
-];
-
-const PROVIDERS = [
-  "E2B",
-  "Daytona",
-  "Modal",
-  "Vercel Sandbox",
-  "Browserbase",
-  "Cloudflare",
-  "Custom Provider / BYO Sandbox",
-];
-
-const COMPARISON = [
-  ["Isolated execution", "yes", "uses provider"],
-  ["Per-action policy", "partial / no", "yes"],
-  ["Restore Points + rollback", "partial / no", "yes"],
-  ["Structured feedback to agent", "no", "yes"],
-  ["Approval gates", "no / partial", "yes"],
-  ["Audit receipt", "partial", "yes"],
-];
-
-export function Hero({ onStart }: HeroProps) {
+export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
   return (
-    <main className="min-h-screen bg-[#05070d] text-slate-100">
-      <LandingNav />
-      <HeroSection onStart={onStart} />
-      <WhatAgentWingIs />
-      <WhyTeamsNeedIt />
-      <HowItWorks />
-      <SandboxShelf />
-      <RuntimeLabPreview onStart={onStart} />
-      <Differentiation />
-      <ContactSection />
-    </main>
-  );
-}
+    <div className="min-h-screen bg-[#05070d] text-slate-100">
+      <PublicNav isSignedIn={isSignedIn} />
 
-function LandingNav() {
-  return (
-    <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#05070d]/92 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
-        <a href="#top" className="flex min-w-0 items-baseline gap-3">
-          <span className="text-base font-semibold tracking-tight text-white">AgentWing</span>
-          <span className="hidden text-[11px] font-medium text-slate-300 sm:inline">
-            2-phase commit for AI agents
-          </span>
-        </a>
-        <nav className="ml-auto hidden items-center gap-5 md:flex">
-          {NAV_ITEMS.map(([label, href]) => (
-            <a key={label} href={href} className="text-sm font-medium text-slate-300 transition hover:text-white">
-              {label}
-            </a>
-          ))}
-        </nav>
-        <a
-          href="/dashboard"
-          className="rounded-md border border-cyan-300/30 bg-cyan-300 px-3.5 py-2 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200 active:scale-[0.99]"
-        >
-          Open dashboard
-        </a>
-      </div>
-    </header>
-  );
-}
-
-function HeroSection({ onStart }: { onStart: () => void }) {
-  return (
-    <section id="top" className="border-b border-white/[0.08]">
-      <div className="mx-auto grid min-h-[720px] max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_0.92fr] lg:py-20">
-        <div>
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.035] px-3 py-1 text-xs text-slate-300">
-            <span className="size-1.5 rounded-full bg-cyan-300" />
-            Control for agents that touch real systems
-          </div>
-          <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl">
-            The execution control layer for AI agents.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-            AgentWing intercepts agent tool calls before they touch files,
-            shells, APIs, sandboxes, or production systems — adding policy
-            checks, Restore Points, sandbox replay, human approval, feedback,
-            and audit receipts.
-          </p>
-          <p className="mt-4 max-w-2xl text-sm font-medium leading-6 text-cyan-100">
-            Agents can plan. Sandboxes can execute. AgentWing controls what is
-            allowed to happen between them.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a
-              href="/api/auth/signin/google"
-              className="rounded-md border border-cyan-300/30 bg-cyan-300 px-5 py-3 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200 active:scale-[0.99]"
-            >
-              Start free
-            </a>
-            <a
-              href="/api/auth/signin/google"
-              className="rounded-md border border-white/[0.12] bg-white/[0.04] px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/[0.2] hover:bg-white/[0.07]"
-            >
-              Sign in with Google
-            </a>
-            <button
-              type="button"
-              onClick={onStart}
-              className="rounded-md border border-white/[0.12] bg-white/[0.04] px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/[0.2] hover:bg-white/[0.07]"
-            >
-              Try Runtime Lab
-            </button>
-            <a
-              href="/docs"
-              className="rounded-md border border-white/[0.12] bg-white/[0.04] px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/[0.2] hover:bg-white/[0.07]"
-            >
-              View docs
-            </a>
-          </div>
-        </div>
-
-        <EnterpriseVisual />
-      </div>
-    </section>
-  );
-}
-
-function EnterpriseVisual() {
-  return (
-    <div className="relative">
-      <div className="absolute -inset-3 rounded-2xl border border-cyan-300/10" />
-      <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-[#080b12] p-6 shadow-2xl shadow-black/50">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-1/2 top-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300/15" />
-          <div className="absolute left-1/2 top-1/2 size-96 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.06]" />
-          <div className="absolute left-1/2 top-1/2 size-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300/[0.06]" />
-          <div className="absolute left-8 top-16 h-px w-32 bg-cyan-300/20" />
-          <div className="absolute right-10 top-28 h-px w-36 bg-red-400/12" />
-          <div className="absolute bottom-16 left-16 h-px w-44 bg-amber-300/14" />
-          <div className="absolute bottom-24 right-12 h-px w-32 bg-emerald-300/14" />
-        </div>
-        <div className="relative flex min-h-[420px] items-center justify-center">
-          <div className="relative rounded-full border border-cyan-300/15 bg-cyan-300/[0.04] p-8 shadow-[0_0_80px_rgba(103,232,249,0.10)]">
-            <span className="absolute left-1/2 top-0 size-2 -translate-x-1/2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.7)]" />
-            <span className="absolute right-5 top-16 size-2 rounded-full bg-red-400 shadow-[0_0_18px_rgba(248,113,113,0.55)]" />
-            <span className="absolute bottom-7 left-12 size-2 rounded-full bg-amber-300 shadow-[0_0_18px_rgba(252,211,77,0.55)]" />
-            <span className="absolute bottom-16 right-8 size-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.55)]" />
-            <div className="rounded-full border border-white/[0.08] bg-[#05070d] p-6">
-              <Mascot state="checking" size={124} />
+      {/* Hero */}
+      <section className="mx-auto max-w-6xl px-4 pb-16 pt-20 sm:px-6 lg:pt-28">
+        <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Runtime infrastructure</p>
+            <h1 className="mt-4 text-5xl font-semibold leading-[1.08] tracking-tight text-white lg:text-6xl">
+              AgentWing
+            </h1>
+            <p className="mt-4 text-xl font-medium text-slate-300">
+              Runtime control layer for AI agents.
+            </p>
+            <p className="mt-5 max-w-lg text-base leading-7 text-slate-400">
+              AgentWing intercepts agent tool calls before execution and applies policy, approval gates, sandbox routing, restore points, structured feedback, and audit receipts.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              {isSignedIn ? (
+                <Link href="/dashboard" className="rounded-md border border-cyan-300/30 bg-cyan-300/[0.1] px-5 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/[0.16]">
+                  Open dashboard
+                </Link>
+              ) : (
+                <>
+                  <a href="/api/auth/signin/google?next=/dashboard" className="rounded-md bg-cyan-300 px-5 py-2.5 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200">
+                    Sign up free with Google
+                  </a>
+                  <a href="/api/auth/signin/google?next=/dashboard" className="rounded-md border border-white/[0.1] px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:text-white">
+                    Sign in
+                  </a>
+                </>
+              )}
+              <Link href="/docs" className="rounded-md border border-white/[0.1] px-5 py-2.5 text-sm font-semibold text-slate-400 transition hover:text-white">
+                Docs
+              </Link>
             </div>
+            {!isSignedIn && (
+              <p className="mt-3 text-xs text-slate-500">Continue with Google. No password needed.</p>
+            )}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function WhatAgentWingIs() {
-  return (
-    <section className="border-b border-white/[0.08] px-4 py-20 sm:px-6">
-      <div className="mx-auto max-w-7xl">
-        <SectionHeading
-          eyebrow="What AgentWing is"
-          title="One control layer for every agent action."
-          copy="AgentWing works across agents, sandboxes, and execution environments. Use it above your existing sandbox, or route actions through AgentWing's sandbox shelf. Every action can be checked, routed, restored, approval-gated, fed back to the agent, and audited."
-        />
-        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {WHAT_CARDS.map(([title, copy]) => (
-            <InfoCard key={title} title={title} copy={copy} />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function WhyTeamsNeedIt() {
-  return (
-    <section className="border-b border-white/[0.08] px-4 py-20 sm:px-6">
-      <div className="mx-auto max-w-7xl">
-        <SectionHeading
-          eyebrow="Why teams need it"
-          title="Agents are moving from chat to execution."
-          copy="Coding agents and ops agents now edit files, run shell commands, call APIs, push branches, and trigger deploys. AgentWing gives teams control before those actions become real."
-        />
-        <div className="mt-10 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {PAIN_CARDS.map(([action, response]) => (
-            <div key={action} className="rounded-xl border border-white/[0.08] bg-[#080b12] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-white">{action}</p>
-                <span className="rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-1 text-[10px] font-semibold text-cyan-100">
-                  {response}
-                </span>
+          {/* Control plane visual */}
+          <div className="rounded-xl border border-white/[0.08] bg-[#080b12] p-6">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Control plane</p>
+            <div className="space-y-1">
+              {controlFlow.map((item, i) => (
+                <div key={item.label} className="flex items-start gap-3">
+                  <div className="flex flex-col items-center">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded border border-cyan-300/20 bg-cyan-300/[0.08] font-mono text-xs text-cyan-100">{i + 1}</span>
+                    {i < controlFlow.length - 1 && <span className="my-1 h-4 w-px bg-white/[0.08]" />}
+                  </div>
+                  <div className="pb-2 pt-0.5">
+                    <p className="text-sm font-semibold text-white">{item.label}</p>
+                    <p className="text-xs text-slate-500">{item.sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 border-t border-white/[0.06] pt-4">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">Decision values</p>
+              <div className="flex flex-wrap gap-1.5">
+                {decisions.map(({ d, cls }) => (
+                  <span key={d} className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${cls}`}>{d}</span>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HowItWorks() {
-  return (
-    <section id="how-it-works" className="border-b border-white/[0.08] px-4 py-20 sm:px-6">
-      <div className="mx-auto max-w-7xl">
-        <SectionHeading
-          eyebrow="How it works"
-          title="Every agent action becomes a controlled transaction."
-          copy="Before execution, AgentWing evaluates the proposed tool call, captures rollback context when needed, routes risky actions through sandbox replay, and returns feedback the agent can use."
-        />
-        <div className="mt-10 grid gap-3 lg:grid-cols-7">
-          {FLOW.map((step, index) => (
-            <div key={step} className="relative rounded-xl border border-white/[0.08] bg-[#080b12] p-4">
-              {index < FLOW.length - 1 && (
-                <div className="absolute -right-3 top-1/2 hidden h-px w-3 bg-cyan-300/30 lg:block" />
-              )}
-              <p className="font-mono text-xs text-cyan-100">0{index + 1}</p>
-              <p className="mt-3 text-sm font-semibold leading-6 text-white">{step}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SandboxShelf() {
-  return (
-    <section id="sandbox-shelf" className="border-b border-white/[0.08] px-4 py-20 sm:px-6">
-      <div className="mx-auto max-w-7xl">
-        <SectionHeading
-          eyebrow="Sandbox Shelf"
-          title="Bring your own sandbox, or choose from AgentWing's sandbox shelf."
-          copy="AgentWing can route actions through E2B, Daytona, Modal, Vercel Sandbox, Browserbase, Cloudflare, or custom enterprise providers. Switch providers anytime and customize policies per sandbox."
-        />
-        <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {PROVIDERS.map((provider) => (
-            <div key={provider} className="rounded-xl border border-white/[0.08] bg-[#080b12] p-4">
-              <p className="text-sm font-semibold text-white">{provider}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-6 grid gap-3 md:grid-cols-3">
-          {[
-            "Switch providers anytime.",
-            "Customize policies per sandbox or provider.",
-            "Route risky actions to the right execution environment.",
-            "Bring your own enterprise sandbox.",
-          ].map((copy) => (
-            <p key={copy} className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.045] px-4 py-3 text-sm text-cyan-50">
-              {copy}
-            </p>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function RuntimeLabPreview({ onStart }: { onStart: () => void }) {
-  return (
-    <section className="border-b border-white/[0.08] px-4 py-20 sm:px-6">
-      <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_0.8fr] lg:items-center">
-        <div>
-          <SectionHeading
-            eyebrow="Runtime Lab"
-            title="Try AgentWing in the Runtime Lab."
-            copy="Run a Mini Code Agent against the Box Arena app. First, see the agent act without controls. Then rerun the same task with AgentWing intercepting actions, routing tests through E2B, creating Restore Points, and generating an audit receipt."
-          />
-          <button
-            type="button"
-            onClick={onStart}
-            className="mt-8 rounded-md border border-cyan-300/30 bg-cyan-300 px-5 py-3 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200 active:scale-[0.99]"
-          >
-            Launch Runtime Lab
-          </button>
-        </div>
-        <BoxArenaPreview />
-      </div>
-    </section>
-  );
-}
-
-function BoxArenaPreview() {
-  return (
-    <div className="rounded-xl border border-white/[0.08] bg-[#080b12] p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">
-            Box Arena
-          </p>
-          <p className="mt-1 text-xs leading-5 text-slate-300">
-            This is the app the Mini Code Agent will edit.
-          </p>
-        </div>
-        <span className="rounded border border-red-400/25 bg-red-400/10 px-2 py-1 text-[10px] font-semibold text-red-300">
-          uncontrolled
-        </span>
-      </div>
-      <div className="rounded border border-white/[0.08] bg-[#05070d] p-3">
-        <div className="grid grid-cols-8 gap-1">
-          {Array.from({ length: 40 }).map((_, index) => (
-            <div
-              key={index}
-              className={`aspect-square rounded-sm border border-white/[0.04] ${
-                index === 10 ? "bg-cyan-300/75" : "bg-white/[0.035]"
-              }`}
-            />
-          ))}
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-[10.5px]">
-          <span className="rounded border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-slate-200">1 box</span>
-          <span className="rounded border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-slate-200">basic score</span>
-          <span className="rounded border border-red-400/20 bg-red-400/[0.06] px-2 py-1 text-red-200">uncontrolled</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Differentiation() {
-  return (
-    <section className="border-b border-white/[0.08] px-4 py-20 sm:px-6">
-      <div className="mx-auto max-w-7xl">
-        <SectionHeading
-          eyebrow="Differentiation"
-          title="Sandbox providers isolate. AgentWing controls."
-          copy="AgentWing gives teams the policy, rollback, feedback, approval, and audit path around each agent action, while still using the execution provider that fits the job."
-        />
-        <div className="mt-10 overflow-hidden rounded-xl border border-white/[0.08] bg-[#080b12]">
-          <div className="grid grid-cols-[1.1fr_0.8fr_0.8fr] border-b border-white/[0.08] bg-[#0c1019] text-sm font-semibold text-white">
-            <div className="px-4 py-3">Capability</div>
-            <div className="px-4 py-3">Sandbox providers</div>
-            <div className="px-4 py-3">AgentWing</div>
+            <pre className="mt-4 overflow-x-auto rounded border border-white/[0.06] bg-[#05070d] p-3 text-[10px] leading-5 text-slate-400">{`{
+  "decision": "block",
+  "risk": "high",
+  "feedback": "Do not read .env.",
+  "nextStep": "Re-plan without reading secret files.",
+  "receiptId": "aw_receipt_..."
+}`}</pre>
           </div>
-          {COMPARISON.map(([capability, sandbox, agentwing]) => (
-            <div key={capability} className="grid grid-cols-[1.1fr_0.8fr_0.8fr] border-b border-white/[0.06] text-sm last:border-b-0">
-              <div className="px-4 py-3 font-medium text-slate-100">{capability}</div>
-              <div className="px-4 py-3 text-slate-300">{sandbox}</div>
-              <div className="px-4 py-3 text-cyan-100">{agentwing}</div>
-            </div>
-          ))}
         </div>
-        <p className="mt-5 text-sm font-medium text-slate-200">
-          Your sandbox handles isolation. AgentWing controls what enters it.
-        </p>
-      </div>
-    </section>
-  );
-}
+      </section>
 
-function ContactSection() {
-  return (
-    <section id="contact" className="px-4 py-20 sm:px-6">
-      <div className="mx-auto grid max-w-7xl gap-8 rounded-2xl border border-white/[0.08] bg-[#080b12] p-6 sm:p-8 lg:grid-cols-[1fr_0.7fr]">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
-            Self-serve beta
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Building agents that touch real systems?
+      {/* Problem */}
+      <section className="border-t border-white/[0.06] bg-[#080b12]">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">The problem</p>
+          <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-white">
+            Agents act faster than teams can review
           </h2>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-            Start free with Google, create a project, generate an AgentWing API key,
-            and connect your own E2B sandbox when you are ready to run real actions.
+          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-400">
+            AI agents can read secrets, execute destructive commands, push to production, and exfiltrate data — all before a human sees the diff. Most teams have no runtime control layer.
           </p>
-          <div className="mt-5 w-fit rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2 text-sm font-semibold text-cyan-100">
-            Your dashboard, projects, API keys, usage, receipts, and sandbox config are user-scoped.
-          </div>
-          <div className="mt-5 text-sm leading-6 text-slate-300">
-            <p>For bugs, reports, product enquiries, or demos:</p>
-            <p className="mt-1 font-mono text-cyan-100">founder@gpmai.dev</p>
-            <p className="font-mono text-cyan-100">ziyad@gpmai.dev</p>
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            {[
+              { title: "No audit trail", body: "Agents act. Nothing is recorded. When something breaks you have no receipt." },
+              { title: "No policy enforcement", body: "Default tool access is all-or-nothing. Agents can read .env, run rm -rf, push to main." },
+              { title: "No feedback loop", body: "When an agent is blocked, it has no context to re-plan. It just fails." },
+            ].map(({ title, body }) => (
+              <div key={title} className="rounded-md border border-white/[0.08] p-5">
+                <p className="font-semibold text-white">{title}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{body}</p>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="flex flex-col justify-center gap-3 rounded-xl border border-white/[0.08] bg-[#05070d] p-4">
-          <a
-            href="/api/auth/signin/google"
-            className="w-full rounded-md border border-cyan-300/30 bg-cyan-300 px-4 py-3 text-center text-sm font-semibold text-[#031018] transition hover:bg-cyan-200 active:scale-[0.99]"
-          >
-            Start free
-          </a>
-          <a
-            href="/dashboard"
-            className="w-full rounded-md border border-white/[0.1] bg-white/[0.04] px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:bg-white/[0.07]"
-          >
-            Open dashboard
-          </a>
-          <a
-            href="/runtime-lab"
-            className="w-full rounded-md border border-white/[0.1] bg-white/[0.04] px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:bg-white/[0.07]"
-          >
-            Try Runtime Lab
-          </a>
+      </section>
+
+      {/* Features */}
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">What AgentWing does</p>
+        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">Runtime controls, not just guardrails</h2>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map(({ title, body }) => (
+            <div key={title} className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
+              <p className="font-semibold text-white">{title}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{body}</p>
+            </div>
+          ))}
         </div>
-      </div>
-    </section>
-  );
+      </section>
+
+      {/* API snippet */}
+      <section className="border-t border-white/[0.06] bg-[#080b12]">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">One API call</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">Add runtime control in minutes</h2>
+              <p className="mt-4 text-base leading-7 text-slate-400">
+                Before your agent executes any action, call <span className="font-mono text-cyan-100">/api/v1/check-action</span>.
+                AgentWing returns a decision in milliseconds. No SDK required.
+              </p>
+              <div className="mt-6 flex gap-3">
+                <Link href="/docs" className="rounded border border-white/[0.1] px-4 py-2 text-sm font-semibold text-slate-200 transition hover:text-white">
+                  Full docs
+                </Link>
+                <Link href="/dashboard/integrations" className="rounded border border-white/[0.1] px-4 py-2 text-sm font-semibold text-slate-400 transition hover:text-white">
+                  Integration guide
+                </Link>
+              </div>
+            </div>
+            <pre className="overflow-x-auto rounded-xl border border-white/[0.08] bg-[#05070d] p-5 text-xs leading-6 text-slate-300">{`POST /api/v1/check-action
+Authorization: Bearer YOUR_AW_API_KEY
+
+{
+  "actionType": "file_access",
+  "tool": "filesystem",
+  "target": ".env"
 }
 
-function SectionHeading({ eyebrow, title, copy }: { eyebrow: string; title: string; copy: string }) {
-  return (
-    <div className="max-w-3xl">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
-        {eyebrow}
-      </p>
-      <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-        {title}
-      </h2>
-      <p className="mt-4 text-base leading-7 text-slate-300">{copy}</p>
+→ {
+  "decision": "block",
+  "risk": "high",
+  "feedback": "Do not read .env.",
+  "nextStep": "Re-plan without reading secret files."
+}`}</pre>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
+        <h2 className="text-3xl font-semibold tracking-tight text-white">Start adding runtime control today</h2>
+        <p className="mx-auto mt-4 max-w-xl text-base text-slate-400">
+          Free during beta. Sign up with Google. No credit card, no password.
+        </p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          {isSignedIn ? (
+            <Link href="/dashboard" className="rounded-md bg-cyan-300 px-6 py-3 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200">
+              Open dashboard
+            </Link>
+          ) : (
+            <>
+              <a href="/api/auth/signin/google?next=/dashboard" className="rounded-md bg-cyan-300 px-6 py-3 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200">
+                Sign up free with Google
+              </a>
+              <Link href="/docs" className="rounded-md border border-white/[0.1] px-6 py-3 text-sm font-semibold text-slate-300 transition hover:text-white">
+                Read the docs
+              </Link>
+            </>
+          )}
+        </div>
+        {!isSignedIn && (
+          <p className="mt-3 text-xs text-slate-600">Continue with Google. No password needed.</p>
+        )}
+      </section>
+
+      <PublicFooter />
     </div>
-  );
-}
-
-function InfoCard({ title, copy }: { title: string; copy: string }) {
-  return (
-    <article className="rounded-xl border border-white/[0.08] bg-[#080b12] p-5">
-      <p className="text-lg font-semibold text-white">{title}</p>
-      <p className="mt-3 text-sm leading-6 text-slate-300">{copy}</p>
-    </article>
   );
 }

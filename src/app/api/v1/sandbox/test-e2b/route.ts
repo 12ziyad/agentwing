@@ -47,7 +47,9 @@ export async function POST(request: Request) {
       projectId: action.projectId,
       sessionId: action.sessionId,
     });
-    const nextSandbox = await recordE2BTestResult(result.exitCode === 0 ? "success" : "failed", sandboxOwnerId);
+    const testStatus = result.exitCode === 0 ? "success" : "failed";
+    const testError = result.exitCode !== 0 ? (result.error ?? "Non-zero exit code") : undefined;
+    const nextSandbox = await recordE2BTestResult(testStatus, sandboxOwnerId, testError);
 
     if (result.exitCode !== 0 || result.error) {
       return Response.json(
@@ -68,13 +70,14 @@ export async function POST(request: Request) {
       message: "E2B BYOK connection test succeeded. Runtime sandbox execution is enabled.",
     });
   } catch (error) {
-    const nextSandbox = await recordE2BTestResult("failed", sandboxOwnerId);
+    const errMsg = error instanceof Error ? error.message : "E2B connection test failed.";
+    const nextSandbox = await recordE2BTestResult("failed", sandboxOwnerId, errMsg);
     return Response.json(
       {
         ok: false,
         provider: "e2b-byok",
         sandbox: nextSandbox,
-        message: error instanceof Error ? error.message : "E2B connection test failed.",
+        message: errMsg,
       },
       { status: 502 },
     );

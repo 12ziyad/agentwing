@@ -72,6 +72,53 @@ function shellCommand(action: AgentAction) {
   return (action.command ?? action.target ?? "").trim();
 }
 
+function commandSegments(command: string) {
+  return command
+    .replace(/[`"']/g, "")
+    .split(/\s*(?:&&|\|\||[;|])\s*/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function isRootRecursiveForceRm(segment: string) {
+  const tokens = segment.split(/\s+/).filter(Boolean);
+  if (tokens[0]?.toLowerCase() === "sudo") tokens.shift();
+  if (tokens[0]?.toLowerCase() !== "rm") return false;
+
+  const args = tokens.slice(1);
+  const optionLetters = args
+    .filter((arg) => arg.startsWith("-") && arg !== "--")
+    .join("")
+    .toLowerCase();
+  const hasRecursiveForce = optionLetters.includes("r") && optionLetters.includes("f");
+  const targets = args.filter((arg) => !arg.startsWith("-") || arg === "/");
+
+  return hasRecursiveForce && targets.some((target) => target === "/" || target === "/*");
+}
+
+function isDestructiveShellCommand(action: AgentAction) {
+  const command = shellCommand(action);
+  const normalized = command.replace(/[`"']/g, "").replace(/\s+/g, " ").trim();
+  const lower = normalized.toLowerCase();
+  const segments = commandSegments(command);
+
+  if (segments.some(isRootRecursiveForceRm)) return true;
+  if (/\bdel\s+(?:\/[a-z]\s+)*[a-z]:\\?(?:\s|$)/i.test(normalized)) return true;
+  if (/\bremove-item\b(?=.*\b-recurse\b)(?=.*\b-force\b)(?=.*\b[a-z]:\\?(?:\s|$))/i.test(normalized)) return true;
+  if (/\bformat\s+[a-z]:/i.test(normalized)) return true;
+  if (/(?:^|\s)(?:sudo\s+)?mkfs(?:\.[a-z0-9_+-]+)?\b/i.test(normalized)) return true;
+  if (/(?:^|\s)(?:sudo\s+)?dd\b(?=.*\bif=\/dev\/zero\b)/i.test(normalized)) return true;
+  if (/(?:^|\s)(?:sudo\s+)?(?:shutdown|reboot|halt|poweroff)\b/i.test(normalized)) return true;
+  if (/\b(?:stop-computer|restart-computer)\b/i.test(normalized)) return true;
+
+  const productionDatabaseMutation =
+    /\b(prod|production)\b/i.test(normalized) &&
+    /\b(drop\s+database|drop\s+schema|truncate\s+table|delete\s+from|prisma\s+migrate\s+reset|db:reset|db:drop|rails\s+db:drop)\b/i.test(normalized);
+  if (productionDatabaseMutation) return true;
+
+  return lower === "shutdown" || lower === "reboot";
+}
+
 export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
   const command = shellCommand(action);
   const combined = text(action);
@@ -91,6 +138,15 @@ export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
       risk: "high",
       policy: "block-secret-file-access",
       feedback: "Commands that print secret files are blocked. Use an example file or a scoped secret reference.",
+    };
+  }
+
+  if (action.actionType === "shell_command" && isDestructiveShellCommand(action)) {
+    return {
+      decision: "block",
+      risk: "critical",
+      policy: "block-destructive-shell-command",
+      feedback: "Destructive system-level shell commands are blocked before sandbox routing. Stop and re-plan with a safe, scoped alternative.",
     };
   }
 
@@ -130,7 +186,7 @@ export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
     };
   }
 
-  if (action.actionType === "database_query" && /\b(drop|truncate)\b/i.test(command || combined)) {
+  if ((action.actionType === "database_query" || action.actionType === "database_operation") && /\b(drop|truncate)\b/i.test(command || combined)) {
     return {
       decision: "block",
       risk: "high",
@@ -139,7 +195,7 @@ export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
     };
   }
 
-  if (action.actionType === "database_query" && /\b(delete|update|alter)\b/i.test(command || combined)) {
+  if ((action.actionType === "database_query" || action.actionType === "database_operation") && /\b(delete|update|alter)\b/i.test(command || combined)) {
     return {
       decision: "approval_required",
       risk: "high",
@@ -186,7 +242,7 @@ export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
     };
   }
 
-  if (action.actionType === "database_query" && /^\s*select\b/i.test(command || (action.description ?? ""))) {
+  if ((action.actionType === "database_query" || action.actionType === "database_operation") && /^\s*select\b/i.test(command || (action.description ?? ""))) {
     return {
       decision: "allow",
       risk: "low",
@@ -195,13 +251,65 @@ export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
     };
   }
 
-  if (action.actionType === "api_call" && /(^|\s)(get|head|options)(\s|$)/i.test(combined)) {
+  if ((action.actionType === "database_query" || action.actionType === "database_operation") && /\b(drop|truncate)\b/i.test(command || combined)) {
     return {
-      decision: "allow",
-      risk: "low",
-      policy: "allow-read-only-api-call",
-      feedback: "Read-only API call allowed.",
+      decision: "block",
+      risk: "high",
+      policy: "block-destructive-database-operation",
+      feedback: "DROP and TRUNCATE operations are blocked by the default database policy.",
     };
+  }
+
+  if (action.actionType === "git_operation") {
+    if (/\b(push\s+.*--force|force[_-]?push)\b/i.test(command || combined)) {
+      return { decision: "block", risk: "high", policy: "block-force-push", feedback: "Force pushes are blocked. Use a PR." };
+    }
+    return { decision: "allow", risk: "low", policy: "allow-git-operation", feedback: "Git operation allowed." };
+  }
+
+  if (action.actionType === "package_install") {
+    return {
+      decision: "sandbox_required",
+      risk: "medium",
+      policy: "sandbox-package-install",
+      feedback: "Package installs must run in a sandbox first to check for supply chain issues.",
+      provider: "e2b-byok",
+    };
+  }
+
+  if (action.actionType === "code_execution") {
+    return {
+      decision: "sandbox_required",
+      risk: "medium",
+      policy: "sandbox-code-execution",
+      feedback: "Arbitrary code execution must run in a sandbox first.",
+      provider: "e2b-byok",
+    };
+  }
+
+  if (action.actionType === "config_change") {
+    return {
+      decision: "restore_point_required",
+      risk: "medium",
+      policy: "restore-point-config-change",
+      feedback: "Create a restore point before modifying configuration files.",
+    };
+  }
+
+  if (action.actionType === "agent_spawn") {
+    return {
+      decision: "approval_required",
+      risk: "high",
+      policy: "approval-agent-spawn",
+      feedback: "Spawning sub-agents requires human approval.",
+    };
+  }
+
+  if (action.actionType === "api_call" || action.actionType === "network_request") {
+    if (/(^|\s)(get|head|options)(\s|$)/i.test(combined)) {
+      return { decision: "allow", risk: "low", policy: "allow-read-only-api-call", feedback: "Read-only API call allowed." };
+    }
+    return { decision: "allow", risk: "low", policy: "allow-api-call", feedback: "API call allowed." };
   }
 
   if (action.actionType === "file_access") {

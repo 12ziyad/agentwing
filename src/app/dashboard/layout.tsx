@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { AdminAccessScreen } from "@/components/dashboard/AdminAccessScreen";
-import { getAdminAccessCode } from "@/lib/adminAccess";
 import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
 
 export default async function DashboardLayout({
@@ -9,7 +8,6 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const accessCode = getAdminAccessCode();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore
     .getAll()
@@ -18,15 +16,7 @@ export default async function DashboardLayout({
   const auth = await getDashboardAuthFromCookieHeader(cookieHeader);
 
   if (!auth) {
-    return (
-      <AdminAccessScreen
-        error={
-          !accessCode
-            ? "Set ADMIN_ACCESS_CODE or DEMO_ACCESS_CODE on the server to enable dashboard access."
-            : undefined
-        }
-      />
-    );
+    redirect("/api/auth/signin/google");
   }
 
   return <DashboardShell auth={auth}>{children}</DashboardShell>;

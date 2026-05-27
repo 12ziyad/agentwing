@@ -7,6 +7,7 @@ import {
   OAUTH_STATE_COOKIE_NAME,
   sessionCookie,
 } from "@/lib/auth";
+import { trackEvent } from "@/lib/agentwingStore";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,12 @@ export async function GET(request: Request) {
     const headers = new Headers({ Location: "/dashboard" });
     headers.append("Set-Cookie", clearCookie(OAUTH_STATE_COOKIE_NAME));
     headers.append("Set-Cookie", sessionCookie(session.token, session.maxAge));
+
+    await trackEvent("user_signed_in", {
+      workspaceId: session.workspace.workspaceId,
+      userId: session.user.userId,
+      metadata: { email: session.user.email },
+    });
 
     return new Response(null, {
       status: 302,

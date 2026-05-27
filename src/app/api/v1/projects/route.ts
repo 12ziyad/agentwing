@@ -1,4 +1,4 @@
-import { createProject, listProjects } from "@/lib/agentwingStore";
+import { createProject, listProjects, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -28,6 +28,12 @@ export async function POST(request: Request) {
 
   try {
     const project = await createProject(name, auth.workspaceId);
+    await trackEvent("project_created", {
+      workspaceId: auth.workspaceId,
+      userId: auth.mode === "user" ? auth.user.userId : undefined,
+      projectId: project.projectId,
+      metadata: { name: project.name },
+    });
     return Response.json({ project }, { status: 201 });
   } catch (error) {
     return Response.json(
