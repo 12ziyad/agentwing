@@ -141,3 +141,9 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+.dev.vars
+.wrangler/
+.next/
+.open-next/
+dist/
+*.local
