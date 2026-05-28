@@ -21,6 +21,11 @@ const riskClass: Record<string, string> = {
   critical: "text-red-300",
 };
 
+function maskedProjectId(projectId?: string) {
+  if (!projectId) return "Workspace scoped";
+  return projectId.length > 10 ? `${projectId.slice(0, 6)}...${projectId.slice(-4)}` : "Project scoped";
+}
+
 export default async function ReceiptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const cookieStore = await cookies();
@@ -79,7 +84,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
             {receipt.target && <Field label="Target" value={receipt.target.slice(0, 200)} mono />}
             {receipt.sessionId && <Field label="Session" value={receipt.sessionId} mono />}
             {receipt.agentId && <Field label="Agent" value={receipt.agentId} mono />}
-            {receipt.projectId && <Field label="Project" value={receipt.projectId} mono />}
+            {receipt.projectId && <Field label="Project" value={maskedProjectId(receipt.projectId)} mono />}
           </div>
         </div>
       </section>

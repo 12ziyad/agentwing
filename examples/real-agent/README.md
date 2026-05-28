@@ -44,9 +44,9 @@ The agent proposes four actions:
 
 For `sandbox_required`, this example does not execute locally. Route the action to AgentWing sandbox/E2B or your own connected sandbox.
 
-For `approval_required`, the example prints the approval ID when AgentWing returns one and tells you to open:
+For `approval_required`, the newer managed-run flow keeps approval inline in the run. This check-only example prints the approval ID when AgentWing returns one and tells you to open:
 
-https://agentwing.gpmai.dev/dashboard/approvals
+https://agentwing.gpmai.dev/dashboard/runs
 
 For `restore_point_required`, the example prints checkpoint guidance. It does not fake rollback.
 

@@ -1,4 +1,4 @@
-import { SandboxesPanel } from "@/components/dashboard/ProductPanels";
+import { SandboxesPanel } from "@/components/dashboard/SandboxesPanel";
 
 export default function SandboxesPage() {
   return <SandboxesPanel />;

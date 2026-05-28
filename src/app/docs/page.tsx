@@ -13,6 +13,19 @@ const curlExample = `curl -X POST https://agentwing.gpmai.dev/api/v1/check-actio
     "description": "Read .env file"
   }'`;
 
+const executeActionExample = `curl -X POST https://agentwing.gpmai.dev/api/v1/execute-action \\
+  -H "Authorization: Bearer AW_LIVE_KEY_HERE" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "projectId": "YOUR_PROJECT_ID",
+    "sessionId": "live-test",
+    "agentId": "test-agent",
+    "actionType": "package_install",
+    "tool": "npm",
+    "command": "npm install lodash",
+    "description": "Install lodash"
+  }'`;
+
 const psExample = `$headers = @{
   "Authorization" = "Bearer AW_LIVE_KEY_HERE"
   "Content-Type"  = "application/json"
@@ -97,7 +110,7 @@ export default function DocsPage() {
           AgentWing — Runtime control layer for AI agents
         </h1>
         <p className="mt-5 max-w-3xl text-base leading-7 text-slate-300">
-          Policy, approval, sandbox routing, restore points, feedback, and audit receipts before agent actions execute.
+          Policy decisions, approval gates, sandbox routing, restore points, execution logs, and audit receipts before tools run.
         </p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -144,6 +157,13 @@ export default function DocsPage() {
           <CodeBlock label="Expected response" code={responseExample} />
         </DocSection>
 
+        <DocSection title="4b. Or create a managed action run">
+          <p className="mb-4 text-sm leading-6 text-slate-300">
+            Use <code className="font-mono text-cyan-100">/api/v1/execute-action</code> when you want AgentWing to create a full lifecycle record. Runs are visible at <Link href="/dashboard/runs" className="font-mono text-cyan-100">Dashboard - Runs</Link>.
+          </p>
+          <CodeBlock label="cURL" code={executeActionExample} />
+        </DocSection>
+
         <DocSection title="5. Decision values">
           <div className="grid gap-3 md:grid-cols-2">
             {[
@@ -186,7 +206,7 @@ export default function DocsPage() {
 
         <DocSection title="8. Receipts and usage">
           <p className="text-sm leading-6 text-slate-300">
-            Every <code className="font-mono text-cyan-100">/api/v1/check-action</code> call creates an audit receipt.
+            Every <code className="font-mono text-cyan-100">/api/v1/check-action</code> call and managed action run creates an audit receipt.
             Go to <Link href="/dashboard/receipts" className="font-mono text-cyan-100">Dashboard → Receipts</Link> to view them.
             Click any receipt for the full decision detail, sandbox output, and metadata.
             <br />

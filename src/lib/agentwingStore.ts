@@ -7,7 +7,12 @@ import type {
   AgentWingUser,
   AgentWingWorkspace,
   DashboardAuthContext,
+  ActionRun,
+  ActionRunStats,
+  ActionRunStatus,
   ApiKeyUsage,
+  ExecutionEvent,
+  ExecutionTarget,
   PolicyEvaluation,
   ReceiptStats,
   SandboxProviderConfig,
@@ -25,6 +30,9 @@ type ApiKeyInternal = AgentWingApiKeyRecord & {
 
 type StoreState = {
   receipts: ActionReceipt[];
+  actionRuns: ActionRun[];
+  executionEvents: ExecutionEvent[];
+  runnerApprovalTokens: RunnerApprovalTokenRecord[];
   sandbox: SandboxConfig;
   usageByApiKey: Record<string, ApiKeyUsage>;
   projects: AgentWingProject[];
@@ -34,6 +42,18 @@ type StoreState = {
   workspacesById: Record<string, AgentWingWorkspace>;
   userWorkspaceIds: Record<string, string>;
   sessionsByTokenHash: Record<string, { sessionId: string; userId: string; tokenHash: string; expiresAt: string; createdAt: string }>;
+};
+
+type RunnerApprovalTokenRecord = {
+  tokenId: string;
+  runId: string;
+  workspaceId: string;
+  tokenHash: string;
+  surface: string;
+  runnerId?: string;
+  expiresAt: string;
+  usedAt?: string;
+  createdAt: string;
 };
 
 type AuthenticatedApiKey = {
@@ -65,6 +85,56 @@ type ReceiptRow = {
   exit_code?: number | null;
   duration_ms?: number | null;
   error?: string | null;
+  created_at: string;
+};
+
+type ActionRunRow = {
+  run_id: string;
+  workspace_id: string;
+  project_id?: string | null;
+  api_key_id?: string | null;
+  receipt_id?: string | null;
+  approval_id?: string | null;
+  action_json: string;
+  decision: ActionRun["decision"];
+  risk: ActionRun["risk"];
+  policy: string;
+  feedback?: string | null;
+  next_step?: string | null;
+  status: ActionRunStatus;
+  execution_target?: ExecutionTarget | null;
+  sandbox_provider?: string | null;
+  sandbox_run_id?: string | null;
+  stdout?: string | null;
+  stderr?: string | null;
+  exit_code?: number | null;
+  execution_logs_json?: string | null;
+  error_message?: string | null;
+  duration_ms?: number | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+  approval_source?: string | null;
+};
+
+type RunnerApprovalTokenRow = {
+  token_id: string;
+  run_id: string;
+  workspace_id: string;
+  token_hash: string;
+  surface: string;
+  runner_id?: string | null;
+  expires_at: string;
+  used_at?: string | null;
+  created_at: string;
+};
+
+type ExecutionEventRow = {
+  event_id: string;
+  run_id: string;
+  event_type: string;
+  message?: string | null;
+  metadata_json?: string | null;
   created_at: string;
 };
 
@@ -130,6 +200,7 @@ type SandboxRow = {
   updated_at?: string | null;
   last_test_status?: string | null;
   last_tested_at?: string | null;
+  last_error?: string | null;
 };
 
 type UserRow = {
@@ -195,6 +266,9 @@ function getState(): StoreState {
   if (!globalStore[STORE_SYMBOL]) {
     globalStore[STORE_SYMBOL] = {
       receipts: [],
+      actionRuns: [],
+      executionEvents: [],
+      runnerApprovalTokens: [],
       sandbox: {
         provider: "e2b-byok",
         connected: false,
@@ -250,6 +324,10 @@ function randomId(prefix: string) {
     return `${prefix}_${cryptoObject.randomUUID().replace(/-/g, "").slice(0, 16)}`;
   }
   return `${prefix}_${Math.random().toString(36).slice(2, 18)}`;
+}
+
+export function createAgentWingId(prefix: string) {
+  return randomId(prefix);
 }
 
 function randomToken(bytesLength = 24) {
@@ -365,6 +443,89 @@ function mapReceiptRow(row: ReceiptRow): ActionReceipt {
     exitCode: row.exit_code ?? undefined,
     durationMs: row.duration_ms ?? undefined,
     error: row.error ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+function parseJsonObject(value?: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseExecutionEvents(value?: string | null): ExecutionEvent[] | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed as ExecutionEvent[] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function mapExecutionEventRow(row: ExecutionEventRow): ExecutionEvent {
+  return {
+    eventId: row.event_id,
+    runId: row.run_id,
+    eventType: row.event_type,
+    message: row.message ?? undefined,
+    metadata: parseJsonObject(row.metadata_json),
+    createdAt: row.created_at,
+  };
+}
+
+function mapActionRunRow(row: ActionRunRow): ActionRun {
+  let action: AgentAction;
+  try {
+    action = JSON.parse(row.action_json) as AgentAction;
+  } catch {
+    action = { actionType: "custom_action", description: "Unable to parse stored action JSON." };
+  }
+
+  return {
+    runId: row.run_id,
+    workspaceId: row.workspace_id,
+    projectId: row.project_id ?? undefined,
+    apiKeyId: row.api_key_id ?? undefined,
+    receiptId: row.receipt_id ?? undefined,
+    approvalId: row.approval_id ?? undefined,
+    action,
+    decision: row.decision,
+    risk: row.risk,
+    policy: row.policy,
+    feedback: row.feedback ?? undefined,
+    nextStep: row.next_step ?? undefined,
+    status: row.status,
+    executionTarget: row.execution_target ?? "none",
+    sandboxProvider: row.sandbox_provider ?? undefined,
+    sandboxRunId: row.sandbox_run_id ?? undefined,
+    stdout: row.stdout ?? undefined,
+    stderr: row.stderr ?? undefined,
+    exitCode: row.exit_code ?? undefined,
+    executionLogs: parseExecutionEvents(row.execution_logs_json),
+    errorMessage: row.error_message ?? undefined,
+    durationMs: row.duration_ms ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at ?? undefined,
+    approvalSource: row.approval_source ?? undefined,
+  };
+}
+
+function mapRunnerApprovalTokenRow(row: RunnerApprovalTokenRow): RunnerApprovalTokenRecord {
+  return {
+    tokenId: row.token_id,
+    runId: row.run_id,
+    workspaceId: row.workspace_id,
+    tokenHash: row.token_hash,
+    surface: row.surface,
+    runnerId: row.runner_id ?? undefined,
+    expiresAt: row.expires_at,
+    usedAt: row.used_at ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -498,6 +659,7 @@ function publicSandboxConfig(row?: Partial<SandboxRow> | null): SandboxProviderC
     updatedAt: row?.updated_at ?? undefined,
     lastTestStatus,
     lastTestedAt: row?.last_tested_at ?? undefined,
+    lastError: row?.last_error ?? undefined,
     runtimeExecutionEnabled: connected,
     e2bKeySaved: connected,
     e2bKeyLast4: row?.e2b_key_last4 ?? undefined,
@@ -1370,6 +1532,564 @@ export async function getReceipt(receiptId: string, workspaceId?: string) {
   }
 
   return memoryReceipt;
+}
+
+export async function updateReceiptExecutionResult(
+  receiptId: string,
+  workspaceId: string | undefined,
+  result: Partial<Pick<ActionReceipt, "provider" | "mode" | "stdout" | "stderr" | "exitCode" | "durationMs" | "error" | "feedback">>,
+) {
+  const db = await getDb();
+  if (db) {
+    try {
+      const sets: string[] = [];
+      const values: unknown[] = [];
+      if (result.provider !== undefined) { sets.push("provider = ?"); values.push(result.provider); }
+      if (result.mode !== undefined) { sets.push("mode = ?"); values.push(result.mode); }
+      if (result.stdout !== undefined) { sets.push("stdout = ?"); values.push(result.stdout); }
+      if (result.stderr !== undefined) { sets.push("stderr = ?"); values.push(result.stderr); }
+      if (result.exitCode !== undefined) { sets.push("exit_code = ?"); values.push(result.exitCode); }
+      if (result.durationMs !== undefined) { sets.push("duration_ms = ?"); values.push(result.durationMs); }
+      if (result.error !== undefined) { sets.push("error = ?"); values.push(result.error); }
+      if (result.feedback !== undefined) { sets.push("feedback = ?"); values.push(result.feedback); }
+
+      if (sets.length > 0) {
+        const where = workspaceId ? "receipt_id = ? AND workspace_id = ?" : "receipt_id = ?";
+        values.push(receiptId, ...(workspaceId ? [workspaceId] : []));
+        await db.prepare(`UPDATE receipts SET ${sets.join(", ")} WHERE ${where}`).bind(...values).run();
+      }
+    } catch (error) {
+      warnD1Fallback("updateReceiptExecutionResult", error);
+    }
+  }
+
+  const memoryReceipt = getState().receipts.find(
+    (receipt) => receipt.receiptId === receiptId && (!workspaceId || receipt.workspaceId === workspaceId),
+  );
+  if (memoryReceipt) {
+    Object.assign(memoryReceipt, result);
+  }
+}
+
+type CreateActionRunInput = {
+  workspaceId: string;
+  projectId?: string;
+  apiKeyId?: string;
+  receiptId?: string;
+  approvalId?: string;
+  action: AgentAction;
+  evaluation: PolicyEvaluation;
+  nextStep?: string;
+  status: ActionRunStatus;
+  executionTarget?: ExecutionTarget;
+  sandboxProvider?: string;
+  sandboxRunId?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  executionLogs?: ExecutionEvent[];
+  errorMessage?: string;
+  durationMs?: number;
+  completedAt?: string;
+  approvalSource?: string;
+};
+
+export async function createActionRun(input: CreateActionRunInput): Promise<ActionRun> {
+  const now = nowIso();
+  const run: ActionRun = {
+    runId: randomId("run"),
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    apiKeyId: input.apiKeyId,
+    receiptId: input.receiptId,
+    approvalId: input.approvalId,
+    action: sanitizeAction(input.action),
+    decision: input.evaluation.decision,
+    risk: input.evaluation.risk,
+    policy: input.evaluation.policy,
+    feedback: input.evaluation.feedback,
+    nextStep: input.nextStep,
+    status: input.status,
+    executionTarget: input.executionTarget ?? "none",
+    sandboxProvider: input.sandboxProvider ?? input.evaluation.provider,
+    sandboxRunId: input.sandboxRunId,
+    stdout: input.stdout,
+    stderr: input.stderr,
+    exitCode: input.exitCode,
+    executionLogs: input.executionLogs,
+    errorMessage: input.errorMessage,
+    durationMs: input.durationMs,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: input.completedAt,
+    approvalSource: input.approvalSource,
+  };
+
+  const db = await getDb();
+  if (db) {
+    try {
+      await db
+        .prepare(
+          `INSERT INTO action_runs
+           (run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+            action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+            sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+            error_message, duration_ms, created_at, updated_at, completed_at, approval_source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          run.runId,
+          run.workspaceId,
+          run.projectId ?? null,
+          run.apiKeyId ?? null,
+          run.receiptId ?? null,
+          run.approvalId ?? null,
+          JSON.stringify(run.action),
+          run.decision,
+          run.risk,
+          run.policy,
+          run.feedback ?? null,
+          run.nextStep ?? null,
+          run.status,
+          run.executionTarget,
+          run.sandboxProvider ?? null,
+          run.sandboxRunId ?? null,
+          run.stdout ?? null,
+          run.stderr ?? null,
+          run.exitCode ?? null,
+          run.executionLogs ? JSON.stringify(run.executionLogs) : null,
+          run.errorMessage ?? null,
+          run.durationMs ?? null,
+          run.createdAt,
+          run.updatedAt,
+          run.completedAt ?? null,
+          run.approvalSource ?? null,
+        )
+        .run();
+    } catch (error) {
+      warnD1Fallback("createActionRun", error);
+    }
+  }
+
+  const state = getState();
+  state.actionRuns.unshift(run);
+  state.actionRuns = state.actionRuns.slice(0, 500);
+  return run;
+}
+
+type ActionRunUpdate = Partial<{
+  receiptId: string;
+  approvalId: string;
+  feedback: string;
+  nextStep: string;
+  status: ActionRunStatus;
+  executionTarget: ExecutionTarget;
+  sandboxProvider: string;
+  sandboxRunId: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  executionLogs: ExecutionEvent[];
+  errorMessage: string;
+  durationMs: number;
+  completedAt: string;
+  approvalSource: string;
+}>;
+
+export async function updateActionRun(
+  runId: string,
+  updates: ActionRunUpdate,
+  workspaceId?: string,
+): Promise<ActionRun | undefined> {
+  const now = nowIso();
+  const normalizedUpdates = { ...updates, updatedAt: now };
+
+  const db = await getDb();
+  if (db) {
+    try {
+      const columnMap: Record<string, string> = {
+        receiptId: "receipt_id",
+        approvalId: "approval_id",
+        feedback: "feedback",
+        nextStep: "next_step",
+        status: "status",
+        executionTarget: "execution_target",
+        sandboxProvider: "sandbox_provider",
+        sandboxRunId: "sandbox_run_id",
+        stdout: "stdout",
+        stderr: "stderr",
+        exitCode: "exit_code",
+        executionLogs: "execution_logs_json",
+        errorMessage: "error_message",
+        durationMs: "duration_ms",
+        completedAt: "completed_at",
+        approvalSource: "approval_source",
+        updatedAt: "updated_at",
+      };
+      const sets: string[] = [];
+      const values: unknown[] = [];
+
+      for (const [key, value] of Object.entries(normalizedUpdates)) {
+        const column = columnMap[key];
+        if (!column || value === undefined) continue;
+        sets.push(`${column} = ?`);
+        values.push(key === "executionLogs" ? JSON.stringify(value) : value);
+      }
+
+      if (sets.length > 0) {
+        const where = workspaceId ? "run_id = ? AND workspace_id = ?" : "run_id = ?";
+        values.push(runId, ...(workspaceId ? [workspaceId] : []));
+        await db.prepare(`UPDATE action_runs SET ${sets.join(", ")} WHERE ${where}`).bind(...values).run();
+      }
+    } catch (error) {
+      warnD1Fallback("updateActionRun", error);
+    }
+  }
+
+  const state = getState();
+  const memoryRun = state.actionRuns.find((run) => run.runId === runId && (!workspaceId || run.workspaceId === workspaceId));
+  if (memoryRun) {
+    Object.assign(memoryRun, normalizedUpdates);
+  }
+
+  return getActionRun(runId, workspaceId);
+}
+
+export async function listActionRuns(
+  workspaceId?: string,
+  projectId?: string,
+  limit = 100,
+): Promise<ActionRun[]> {
+  const db = await getDb();
+  const memoryRuns = getState().actionRuns.filter(
+    (run) => (!workspaceId || run.workspaceId === workspaceId) && (!projectId || run.projectId === projectId),
+  );
+
+  if (db) {
+    try {
+      const conditions: string[] = [];
+      const values: unknown[] = [];
+      if (workspaceId) { conditions.push("workspace_id = ?"); values.push(workspaceId); }
+      if (projectId) { conditions.push("project_id = ?"); values.push(projectId); }
+      values.push(limit);
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+      const result = await db
+        .prepare(
+          `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+                  action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+                  sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+                  error_message, duration_ms, created_at, updated_at, completed_at, approval_source
+           FROM action_runs
+           ${where}
+           ORDER BY created_at DESC
+           LIMIT ?`,
+        )
+        .bind(...values)
+        .all<ActionRunRow>();
+      const d1Runs = (result.results ?? []).map(mapActionRunRow);
+      return [...memoryRuns.filter((run) => !d1Runs.some((d1Run) => d1Run.runId === run.runId)), ...d1Runs]
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .slice(0, limit);
+    } catch (error) {
+      warnD1Fallback("listActionRuns", error);
+    }
+  }
+
+  return memoryRuns
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, limit);
+}
+
+export async function getActionRun(runId: string, workspaceId?: string): Promise<ActionRun | undefined> {
+  const db = await getDb();
+  const memoryRun = getState().actionRuns.find(
+    (run) => run.runId === runId && (!workspaceId || run.workspaceId === workspaceId),
+  );
+
+  if (db) {
+    try {
+      const statement = workspaceId
+        ? db
+            .prepare(
+              `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+                      action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+                      sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+                      error_message, duration_ms, created_at, updated_at, completed_at, approval_source
+               FROM action_runs
+               WHERE run_id = ? AND workspace_id = ?`,
+            )
+            .bind(runId, workspaceId)
+        : db
+            .prepare(
+              `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+                      action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+                      sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+                      error_message, duration_ms, created_at, updated_at, completed_at, approval_source
+               FROM action_runs
+               WHERE run_id = ?`,
+            )
+            .bind(runId);
+      const row = await statement.first<ActionRunRow>();
+      return row ? mapActionRunRow(row) : memoryRun;
+    } catch (error) {
+      warnD1Fallback("getActionRun", error);
+    }
+  }
+
+  return memoryRun;
+}
+
+export async function appendExecutionEvent(
+  runId: string,
+  eventType: string,
+  message?: string,
+  metadata?: Record<string, unknown>,
+): Promise<ExecutionEvent> {
+  const event: ExecutionEvent = {
+    eventId: randomId("evt"),
+    runId,
+    eventType,
+    message,
+    metadata,
+    createdAt: nowIso(),
+  };
+
+  const db = await getDb();
+  if (db) {
+    try {
+      await db
+        .prepare(
+          `INSERT INTO execution_events
+           (event_id, run_id, event_type, message, metadata_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          event.eventId,
+          event.runId,
+          event.eventType,
+          event.message ?? null,
+          event.metadata ? JSON.stringify(event.metadata).slice(0, 4096) : null,
+          event.createdAt,
+        )
+        .run();
+    } catch (error) {
+      warnD1Fallback("appendExecutionEvent", error);
+    }
+  }
+
+  const state = getState();
+  state.executionEvents.push(event);
+  const run = state.actionRuns.find((candidate) => candidate.runId === runId);
+  if (run) run.executionLogs = [...(run.executionLogs ?? []), event];
+  return event;
+}
+
+export async function listExecutionEvents(runId: string): Promise<ExecutionEvent[]> {
+  const db = await getDb();
+  const memoryEvents = getState().executionEvents.filter((event) => event.runId === runId);
+
+  if (db) {
+    try {
+      const result = await db
+        .prepare(
+          `SELECT event_id, run_id, event_type, message, metadata_json, created_at
+           FROM execution_events
+           WHERE run_id = ?
+           ORDER BY created_at ASC`,
+        )
+        .bind(runId)
+        .all<ExecutionEventRow>();
+      const d1Events = (result.results ?? []).map(mapExecutionEventRow);
+      return [...d1Events, ...memoryEvents.filter((event) => !d1Events.some((d1Event) => d1Event.eventId === event.eventId))]
+        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+    } catch (error) {
+      warnD1Fallback("listExecutionEvents", error);
+    }
+  }
+
+  return memoryEvents.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+}
+
+export async function createRunnerApprovalToken(opts: {
+  runId: string;
+  workspaceId: string;
+  surface: string;
+  runnerId?: string;
+  expiresInMs?: number;
+}): Promise<{ token: string; expiresAt: string }> {
+  const token = `aw_rat_${randomToken(24)}`;
+  const tokenHash = await sha256(token);
+  const now = nowIso();
+  const expiresAt = new Date(Date.now() + (opts.expiresInMs ?? 15 * 60 * 1000)).toISOString();
+  const record: RunnerApprovalTokenRecord = {
+    tokenId: randomId("rat"),
+    runId: opts.runId,
+    workspaceId: opts.workspaceId,
+    tokenHash,
+    surface: opts.surface,
+    runnerId: opts.runnerId,
+    expiresAt,
+    createdAt: now,
+  };
+
+  const db = await getDb();
+  if (db) {
+    try {
+      await db
+        .prepare(
+          `INSERT INTO runner_approval_tokens
+           (token_id, run_id, workspace_id, token_hash, surface, runner_id, expires_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          record.tokenId,
+          record.runId,
+          record.workspaceId,
+          record.tokenHash,
+          record.surface,
+          record.runnerId ?? null,
+          record.expiresAt,
+          record.createdAt,
+        )
+        .run();
+    } catch (error) {
+      warnD1Fallback("createRunnerApprovalToken", error);
+    }
+  }
+
+  getState().runnerApprovalTokens.unshift(record);
+  getState().runnerApprovalTokens = getState().runnerApprovalTokens.slice(0, 500);
+  return { token, expiresAt };
+}
+
+export async function consumeRunnerApprovalToken(
+  runId: string,
+  token: string,
+): Promise<{ ok: true; run: ActionRun; source: string; runnerId?: string } | { ok: false; error: string; status: number }> {
+  const tokenHash = await sha256(token);
+  const now = nowIso();
+  const db = await getDb();
+
+  if (db) {
+    try {
+      const row = await db
+        .prepare(
+          `SELECT token_id, run_id, workspace_id, token_hash, surface, runner_id, expires_at, used_at, created_at
+           FROM runner_approval_tokens
+           WHERE run_id = ? AND token_hash = ?`,
+        )
+        .bind(runId, tokenHash)
+        .first<RunnerApprovalTokenRow>();
+
+      if (!row) return { ok: false, error: "Runner approval token is invalid.", status: 401 };
+      const record = mapRunnerApprovalTokenRow(row);
+      if (record.usedAt) return { ok: false, error: "Runner approval token has already been used.", status: 401 };
+      if (Date.parse(record.expiresAt) <= Date.now()) return { ok: false, error: "Runner approval token has expired.", status: 401 };
+
+      const run = await getActionRun(runId, record.workspaceId);
+      if (!run) return { ok: false, error: "Run not found.", status: 404 };
+      if (run.status === "blocked" || run.decision === "block") {
+        return { ok: false, error: "Blocked actions cannot be approved.", status: 403 };
+      }
+      if (run.status !== "waiting_approval") {
+        return { ok: false, error: "Run is not waiting for approval.", status: 409 };
+      }
+
+      const updateResult = await db
+        .prepare("UPDATE runner_approval_tokens SET used_at = ? WHERE token_id = ? AND used_at IS NULL")
+        .bind(now, record.tokenId)
+        .run();
+      const changes = (updateResult as { meta?: { changes?: number } }).meta?.changes;
+      if (typeof changes === "number" && changes < 1) {
+        return { ok: false, error: "Runner approval token has already been used.", status: 401 };
+      }
+
+      return { ok: true, run, source: `runner_${record.surface}`, runnerId: record.runnerId };
+    } catch (error) {
+      warnD1Fallback("consumeRunnerApprovalToken", error);
+    }
+  }
+
+  const record = getState().runnerApprovalTokens.find((candidate) => candidate.runId === runId && candidate.tokenHash === tokenHash);
+  if (!record) return { ok: false, error: "Runner approval token is invalid.", status: 401 };
+  if (record.usedAt) return { ok: false, error: "Runner approval token has already been used.", status: 401 };
+  if (Date.parse(record.expiresAt) <= Date.now()) return { ok: false, error: "Runner approval token has expired.", status: 401 };
+
+  const run = await getActionRun(runId, record.workspaceId);
+  if (!run) return { ok: false, error: "Run not found.", status: 404 };
+  if (run.status === "blocked" || run.decision === "block") {
+    return { ok: false, error: "Blocked actions cannot be approved.", status: 403 };
+  }
+  if (run.status !== "waiting_approval") {
+    return { ok: false, error: "Run is not waiting for approval.", status: 409 };
+  }
+
+  record.usedAt = now;
+  return { ok: true, run, source: `runner_${record.surface}`, runnerId: record.runnerId };
+}
+
+export async function continueActionRunAfterApproval(
+  runId: string,
+  workspaceId: string,
+  resolvedReason?: string,
+  approvalSource = "dashboard",
+): Promise<ActionRun | undefined> {
+  const run = await getActionRun(runId, workspaceId);
+  if (!run || run.status !== "waiting_approval") return run;
+
+  if (run.approvalId) {
+    await resolveApproval(run.approvalId, workspaceId, "approved", resolvedReason);
+  }
+
+  await appendExecutionEvent(runId, "approval_approved", "Human approval was recorded.", { source: approvalSource });
+  return updateActionRun(
+    runId,
+    {
+      status: "approved",
+      approvalSource,
+      nextStep: "Approval recorded. AgentWing is continuing the guarded execution path.",
+    },
+    workspaceId,
+  );
+}
+
+export async function rejectActionRun(
+  runId: string,
+  workspaceId: string,
+  resolvedReason?: string,
+  approvalSource = "dashboard",
+): Promise<ActionRun | undefined> {
+  const run = await getActionRun(runId, workspaceId);
+  if (!run) return undefined;
+
+  if (run.approvalId && run.status === "waiting_approval") {
+    await resolveApproval(run.approvalId, workspaceId, "rejected", resolvedReason);
+  }
+
+  await appendExecutionEvent(runId, "approval_rejected", "Human rejected this action.", { source: approvalSource });
+  return updateActionRun(
+    runId,
+    {
+      status: "rejected",
+      approvalSource,
+      executionTarget: "skipped",
+      nextStep: "Action rejected. Do not execute this operation.",
+      completedAt: nowIso(),
+    },
+    workspaceId,
+  );
+}
+
+export async function getActionRunStats(workspaceId?: string): Promise<ActionRunStats> {
+  const runs = await listActionRuns(workspaceId, undefined, 500);
+  return {
+    total: runs.length,
+    completed: runs.filter((run) => run.status === "completed").length,
+    blocked: runs.filter((run) => run.status === "blocked").length,
+    waitingApproval: runs.filter((run) => run.status === "waiting_approval").length,
+    sandboxRuns: runs.filter((run) => run.executionTarget === "sandbox").length,
+    externalRunnerRequired: runs.filter((run) => run.status === "external_runner_required").length,
+  };
 }
 
 export async function getReceiptStats(workspaceId?: string): Promise<ReceiptStats> {

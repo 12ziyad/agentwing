@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { ReceiptsTable, StatsGrid } from "@/components/dashboard/ProductPanels";
-import { getReceiptStats, listReceipts, getSandboxConfigForWorkspace, listCustomPolicies, listApprovals } from "@/lib/agentwingStore";
+import { getActionRunStats, getReceiptStats, listActionRuns, listReceipts, getSandboxConfigForWorkspace, listCustomPolicies, listApprovals } from "@/lib/agentwingStore";
 import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
+import type { ActionRunStats } from "@/lib/agentwingTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -23,15 +24,18 @@ export default async function DashboardPage() {
   const workspaceId = auth?.workspaceId;
   const workspace = auth?.mode === "user" ? auth.workspace : undefined;
 
-  const [stats, receipts, sandboxConfig, customPolicies, pendingApprovals] = await Promise.all([
+  const [stats, receipts, sandboxConfig, customPolicies, pendingApprovals, recentRuns, runStats] = await Promise.all([
     getReceiptStats(workspaceId),
     listReceipts(workspaceId),
     workspaceId ? getSandboxConfigForWorkspace(workspaceId) : Promise.resolve(null),
     workspaceId ? listCustomPolicies(workspaceId) : Promise.resolve([]),
     workspaceId ? listApprovals(workspaceId, "pending") : Promise.resolve([]),
+    listActionRuns(workspaceId, undefined, 5),
+    getActionRunStats(workspaceId),
   ]);
 
   const recentReceipts = receipts.slice(0, 8);
+  const latestRun = recentRuns[0];
 
   return (
     <div className="space-y-6">
@@ -41,18 +45,49 @@ export default async function DashboardPage() {
           {workspace ? workspace.name : "Control plane"}
         </h1>
         <p className="mt-1 text-sm text-slate-400">
-          AgentWing intercepts agent tool calls and applies policy, approval gates, sandbox routing, restore points, and audit receipts.
+          AgentWing is controlling live action runs: policy checks, approval gates, sandbox routing, restore points, logs, and receipts.
         </p>
       </div>
 
-      <StatsGrid stats={stats} />
+      <RunStatsGrid stats={runStats} actionsChecked={stats.total} receiptsCreated={stats.receiptsCreated} />
+
+      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-white">Latest execution run</p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+              AgentWing is the execution gate between agents and tools. It blocks dangerous actions, routes risky actions to sandbox, requests approval when needed, requires restore points for sensitive changes, and records the full receipt.
+            </p>
+          </div>
+          <Link href="/dashboard/runs" className="rounded border border-white/[0.1] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:text-white">
+            View runs
+          </Link>
+        </div>
+        {latestRun ? (
+          <Link href={`/dashboard/runs/${latestRun.runId}`} className="mt-5 grid gap-3 rounded border border-white/[0.06] bg-[#05070d] p-4 transition hover:border-white/[0.12] md:grid-cols-[1fr_auto]">
+            <div className="min-w-0">
+              <p className="truncate font-mono text-sm text-cyan-100">
+                {latestRun.action.command || latestRun.action.target || latestRun.action.description || latestRun.action.actionType}
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                {latestRun.decision} / {latestRun.status} / {latestRun.executionTarget}
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-cyan-100">View run</span>
+          </Link>
+        ) : (
+          <div className="mt-5 rounded border border-white/[0.06] bg-[#05070d] p-4 text-sm text-slate-400">
+            No runs yet. Call <code className="font-mono text-cyan-100">POST /api/v1/execute-action</code> to create the first guarded lifecycle.
+          </div>
+        )}
+      </section>
 
       {/* Status cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         <StatusCard
           label="Pending approvals"
           value={pendingApprovals.length}
-          href="/dashboard/approvals"
+          href="/dashboard/runs"
           status={pendingApprovals.length > 0 ? "warn" : "ok"}
           suffix={pendingApprovals.length === 1 ? "action awaiting review" : "actions awaiting review"}
         />
@@ -96,14 +131,14 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
         <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <p className="text-sm font-semibold text-white">Control flow</p>
+          <p className="text-sm font-semibold text-white">Execution flow</p>
           <div className="mt-4 space-y-2">
             {[
               "Agent proposes action",
               "AgentWing checks custom policies first, then defaults",
               "Decision: allow / block / approval_required / sandbox_required / restore_point_required",
-              "Structured feedback + nextStep returned to agent",
-              "Audit receipt sealed",
+              "Approval, sandbox, checkpoint, or external runner path selected",
+              "Execution result, logs, and receipt sealed",
             ].map((step, index) => (
               <div key={step} className="flex items-start gap-3 rounded border border-white/[0.06] bg-[#05070d] p-3">
                 <span className="flex size-6 shrink-0 items-center justify-center rounded border border-cyan-300/20 bg-cyan-300/[0.08] font-mono text-xs text-cyan-100">
@@ -136,7 +171,39 @@ Authorization: Bearer YOUR_KEY
         </section>
       </div>
 
+      <StatsGrid stats={stats} />
       <ReceiptsTable receipts={recentReceipts} />
+    </div>
+  );
+}
+
+function RunStatsGrid({
+  stats,
+  actionsChecked,
+  receiptsCreated,
+}: {
+  stats: ActionRunStats;
+  actionsChecked: number;
+  receiptsCreated: number;
+}) {
+  const items = [
+    ["Actions checked", actionsChecked],
+    ["Runs created", stats.total],
+    ["Runs executed", stats.completed],
+    ["Blocked", stats.blocked],
+    ["Sandbox runs", stats.sandboxRuns],
+    ["Waiting approval", stats.waitingApproval],
+    ["Receipts created", receiptsCreated],
+  ] as const;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+      {items.map(([label, value]) => (
+        <article key={label} className="rounded-md border border-white/[0.08] bg-[#080b12] p-4">
+          <p className="text-xs font-medium text-slate-400">{label}</p>
+          <p className="mt-3 text-2xl font-semibold tracking-tight text-white">{value}</p>
+        </article>
+      ))}
     </div>
   );
 }

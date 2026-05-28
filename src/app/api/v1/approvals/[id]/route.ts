@@ -1,4 +1,5 @@
-import { resolveApproval, trackEvent } from "@/lib/agentwingStore";
+import { approveRunAndContinue } from "@/lib/actionRunLifecycle";
+import { listActionRuns, rejectActionRun, resolveApproval, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -30,6 +31,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     workspaceId: auth.workspaceId,
     metadata: { approvalId: id, status, reason },
   });
+
+  const linkedRun = (await listActionRuns(auth.workspaceId, undefined, 100)).find((run) => run.approvalId === id);
+  if (linkedRun) {
+    if (status === "approved") {
+      await approveRunAndContinue(linkedRun.runId, auth.workspaceId, reason);
+    } else {
+      await rejectActionRun(linkedRun.runId, auth.workspaceId, reason);
+    }
+  }
 
   return Response.json({ ok: true, approvalId: id, status });
 }

@@ -9,6 +9,16 @@ export const dynamic = "force-dynamic";
 
 const NOT_AVAILABLE = "Not available yet";
 
+function maskedEmail(value?: string) {
+  if (!value) return NOT_AVAILABLE;
+  return "Email hidden";
+}
+
+function maskedId(value?: string) {
+  if (!value) return NOT_AVAILABLE;
+  return value.length > 10 ? `${value.slice(0, 6)}...${value.slice(-4)}` : "Hidden";
+}
+
 async function safeLoad<T>(loader: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await loader();
@@ -65,9 +75,9 @@ export default async function SettingsPage() {
             <img src={user.image} alt="" referrerPolicy="no-referrer" className="size-14 rounded-full border border-white/[0.1]" />
           )}
           <Row label="Name" value={user?.name ?? NOT_AVAILABLE} />
-          <Row label="Email" value={user?.email ?? NOT_AVAILABLE} />
+          <Row label="Email" value={maskedEmail(user?.email)} />
           <Row label="Avatar" value={user?.image ? "Available" : NOT_AVAILABLE} />
-          <Row label="User ID" value={user?.userId ?? NOT_AVAILABLE} mono />
+          <Row label="User ID" value={maskedId(user?.userId)} mono />
           <Row label="Login method" value="Google" />
           <Row label="Account created" value={formatDate(user?.createdAt)} />
           <Row label="Last login" value={formatDate(user?.lastLoginAt)} />
@@ -86,8 +96,8 @@ export default async function SettingsPage() {
       <SettingsSection title="Workspace">
         <div className="space-y-3 text-sm">
           <Row label="Workspace name" value={workspace?.name ?? NOT_AVAILABLE} />
-          <Row label="Workspace ID" value={workspace?.workspaceId ?? NOT_AVAILABLE} mono copyable={Boolean(workspace?.workspaceId)} />
-          <Row label="Owner email" value={user?.email ?? NOT_AVAILABLE} />
+          <Row label="Workspace ID" value={maskedId(workspace?.workspaceId)} mono />
+          <Row label="Owner email" value={maskedEmail(user?.email)} />
           <Row label="Plan" value="Free/Beta" />
           <Row label="Created date" value={formatDate(workspace?.createdAt)} />
           {workspace?.deleteRequestedAt && <Row label="Deletion request" value={formatDate(workspace.deleteRequestedAt)} />}
@@ -160,7 +170,7 @@ export default async function SettingsPage() {
       <SettingsSection title="Support">
         <div className="flex flex-wrap gap-3 text-sm">
           <a href="mailto:founder@gpmai.dev" className="rounded border border-white/[0.1] px-3 py-2 text-slate-300 transition hover:text-white">
-            founder@gpmai.dev
+            Contact support
           </a>
           <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="rounded border border-white/[0.1] px-3 py-2 text-slate-300 transition hover:text-white">
             GitHub

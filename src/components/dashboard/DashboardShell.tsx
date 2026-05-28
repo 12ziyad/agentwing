@@ -6,13 +6,13 @@ import {
   Activity,
   BookOpen,
   Boxes,
-  CheckSquare,
   Gauge,
   KeyRound,
   LayoutDashboard,
   LogOut,
   PlugZap,
   ReceiptText,
+  Route,
   Settings,
   ShieldCheck,
 } from "lucide-react";
@@ -20,10 +20,10 @@ import type { DashboardAuthContext } from "@/lib/agentwingTypes";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/runs", label: "Runs", icon: Route },
   { href: "/dashboard/projects", label: "Projects", icon: Boxes },
   { href: "/dashboard/api-keys", label: "API Keys", icon: KeyRound },
   { href: "/dashboard/policies", label: "Policies", icon: ShieldCheck },
-  { href: "/dashboard/approvals", label: "Approvals", icon: CheckSquare },
   { href: "/dashboard/sandboxes", label: "Sandboxes", icon: Activity },
   { href: "/dashboard/receipts", label: "Receipts", icon: ReceiptText },
   { href: "/dashboard/usage", label: "Usage", icon: Gauge },
@@ -35,16 +35,19 @@ export function DashboardShell({ children, auth }: { children: React.ReactNode; 
   const pathname = usePathname();
   const user = auth.mode === "user" ? auth.user : undefined;
   const workspace = auth.mode === "user" ? auth.workspace : undefined;
+  const maskedUser = user?.email ? "Signed in" : "Admin";
 
   return (
     <main className="min-h-screen bg-[#05070d] text-slate-100">
       <div className="flex min-h-screen">
         <aside className="hidden w-60 shrink-0 border-r border-white/[0.08] bg-[#080b12] lg:block">
           <div className="border-b border-white/[0.08] px-5 py-5">
-            <Link href="/" className="text-lg font-semibold text-white">
-              AgentWing
+            <Link href="/" className="flex items-center gap-2 text-lg font-semibold text-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/agentwing-icon.png" alt="" className="size-8 rounded" />
+              <span>AgentWing</span>
             </Link>
-            <p className="mt-0.5 text-[11px] text-slate-500">Console</p>
+            <p className="mt-1 text-[11px] text-slate-500">Execution control center</p>
             {workspace && (
               <div className="mt-3 rounded border border-white/[0.08] bg-[#05070d] px-3 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Workspace</p>
@@ -88,12 +91,12 @@ export function DashboardShell({ children, auth }: { children: React.ReactNode; 
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={user.image} alt="" className="size-6 rounded-full" referrerPolicy="no-referrer" />
                   ) : (
-                    <span className="flex size-6 items-center justify-center rounded-full bg-cyan-300 text-xs font-semibold text-[#031018]">
-                      {user?.email?.[0]?.toUpperCase() ?? "A"}
+                  <span className="flex size-6 items-center justify-center rounded-full bg-cyan-300 text-xs font-semibold text-[#031018]">
+                      {workspace?.name?.[0]?.toUpperCase() ?? "A"}
                     </span>
                   )}
                   <span className="max-w-36 truncate text-xs font-medium text-slate-300">
-                    {user?.email ?? "Admin"}
+                    {maskedUser}
                   </span>
                 </div>
                 <Link

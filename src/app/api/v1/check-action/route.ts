@@ -1,4 +1,5 @@
 import { evaluateAgentAction } from "@/lib/agentwingPolicy";
+import { isMandatoryDefaultBlock, nextStepForDecision } from "@/lib/actionRunLifecycle";
 import {
   createApproval,
   createReceipt,
@@ -43,32 +44,6 @@ function parseAction(body: unknown): AgentAction | undefined {
     description: safeString(body.description, MAX_DESCRIPTION_LENGTH),
     metadata: isRecord(body.metadata) ? body.metadata : undefined,
   };
-}
-
-function nextStepForDecision(decision: string, risk: string): string {
-  switch (decision) {
-    case "allow":
-      return "Action cleared. Proceed with execution.";
-    case "block":
-      return risk === "critical" || risk === "high"
-        ? "Stop this action immediately and re-plan without attempting this operation."
-        : "Do not execute this action. Re-plan using a safer alternative.";
-    case "approval_required":
-      return "Pause execution. Wait for a human to approve or reject this action in the AgentWing dashboard before continuing.";
-    case "sandbox_required":
-      return "Do not execute in the main environment. Route this action through the connected sandbox first. Check the sandbox result before proceeding.";
-    case "restore_point_required":
-      return "Create a checkpoint or restore point of current state before executing. Verify the restore point exists, then proceed.";
-    default:
-      return "Review the decision before proceeding.";
-  }
-}
-
-function isMandatoryDefaultBlock(evaluation: PolicyEvaluation) {
-  return (
-    evaluation.decision === "block" &&
-    (evaluation.risk === "critical" || evaluation.policy === "block-secret-file-access")
-  );
 }
 
 export async function POST(request: Request) {

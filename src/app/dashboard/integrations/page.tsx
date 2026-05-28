@@ -15,6 +15,19 @@ const curlExample = `curl -X POST https://agentwing.gpmai.dev/api/v1/check-actio
     "description": "Read .env file"
   }'`;
 
+const executeCurlExample = `curl -X POST https://agentwing.gpmai.dev/api/v1/execute-action \\
+  -H "Authorization: Bearer YOUR_AW_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "projectId": "YOUR_PROJECT_ID",
+    "sessionId": "sess_123",
+    "agentId": "my-agent",
+    "actionType": "package_install",
+    "tool": "npm",
+    "command": "npm install lodash",
+    "description": "Install a package"
+  }'`;
+
 const fetchExample = `const awKey = process.env.AGENTWING_API_KEY; // load once at startup
 
 const res = await fetch("https://agentwing.gpmai.dev/api/v1/check-action", {
@@ -122,11 +135,11 @@ const responseExample = `{
   "nextStep": "Stop this action and re-plan without reading secret-bearing files."
 }`;
 
-const realAgentCommands = `cd C:\\Users\\ziyad\\agentwing-live-lab\\examples\\real-agent
+const realAgentCommands = `cd C:\\Users\\ziyad\\agentwing-live-lab\\examples\\guarded-runner
 npm install
-copy .env.example .env
+copy ..\\real-agent\\.env.example .env
 notepad .env
-node real-agent.mjs`;
+node guarded-runner.mjs`;
 
 export default function IntegrationsPage() {
   return (
@@ -135,8 +148,7 @@ export default function IntegrationsPage() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200">Integrations</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Integrate AgentWing with your agent</h1>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Call <span className="font-mono text-cyan-100">/api/v1/check-action</span> before executing any agent tool call.
-          AgentWing returns a decision, risk level, policy name, human-readable feedback, and a receipt ID.
+          Use <span className="font-mono text-cyan-100">/api/v1/check-action</span> for lightweight decisions, or <span className="font-mono text-cyan-100">/api/v1/execute-action</span> to create a full action run with approval, sandbox, checkpoint, logs, and receipt state.
         </p>
       </div>
 
@@ -145,10 +157,10 @@ export default function IntegrationsPage() {
         <div className="mt-4 space-y-2">
           {[
             { step: "1", text: "Agent proposes an action: file read, shell command, network call, or other tool use." },
-            { step: "2", text: "Client sends the proposed action to /api/v1/check-action before execution." },
+            { step: "2", text: "Client sends the proposed action to /api/v1/check-action for decisions or /api/v1/execute-action for a managed run." },
             { step: "3", text: "AgentWing enforces critical default safety blocks, then evaluates custom policies and remaining defaults." },
             { step: "4", text: "Response includes decision, risk, policy, feedback, receiptId, and nextStep." },
-            { step: "5", text: "Client executes only when allowed, stops on block, waits on approval, checkpoints on restore_point_required, and routes sandbox_required actions to a sandbox." },
+            { step: "5", text: "Runs show the selected guard: blocked, waiting approval, waiting sandbox, restore point required, external runner required, completed, or failed." },
           ].map(({ step, text }) => (
             <div key={step} className="flex items-start gap-3 rounded border border-white/[0.06] bg-[#05070d] p-3">
               <span className="flex size-6 shrink-0 items-center justify-center rounded border border-cyan-300/20 bg-cyan-300/[0.08] font-mono text-xs text-cyan-100">{step}</span>
@@ -164,7 +176,7 @@ export default function IntegrationsPage() {
           {[
             { d: "allow", cls: "text-emerald-200", desc: "Cleared. Proceed with execution." },
             { d: "block", cls: "text-red-200", desc: "Denied. Stop and re-plan. Check feedback." },
-            { d: "approval_required", cls: "text-amber-200", desc: "Pause. Wait for human approval in Approvals dashboard." },
+            { d: "approval_required", cls: "text-amber-200", desc: "Pause. Approve or reject inline from the run detail page." },
             { d: "sandbox_required", cls: "text-cyan-200", desc: "Route to connected E2B or your own sandbox. Do not execute locally without a sandbox." },
             { d: "restore_point_required", cls: "text-violet-200", desc: "Checkpoint current state before continuing." },
           ].map(({ d, cls, desc }) => (
@@ -184,8 +196,8 @@ export default function IntegrationsPage() {
       <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
         <h2 className="text-base font-semibold text-white">Real local agent example</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          See <code className="font-mono text-cyan-100">examples/real-agent</code> for a deterministic agent loop.
-          The API key is loaded once. AgentWing is called before each action.
+          See <code className="font-mono text-cyan-100">examples/guarded-runner</code> for a deterministic agent loop using <code className="font-mono text-cyan-100">execute-action</code>.
+          The API key is loaded once. AgentWing creates a run before each action.
         </p>
         <p className="mt-2 text-sm leading-6 text-slate-400">
           If no sandbox is connected, sandbox_required actions must not execute locally.
@@ -212,6 +224,14 @@ export default function IntegrationsPage() {
       </section>
 
       <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
+        <h2 className="text-base font-semibold text-white">Managed lifecycle cURL</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          This creates a run visible at <code className="font-mono text-cyan-100">/dashboard/runs</code>. Sandbox-required actions execute only in E2B when BYOK is connected; otherwise they wait.
+        </p>
+        <CodeBlock code={executeCurlExample} />
+      </section>
+
+      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
         <h2 className="text-base font-semibold text-white">JavaScript fetch</h2>
         <CodeBlock code={fetchExample} />
       </section>
@@ -228,8 +248,8 @@ export default function IntegrationsPage() {
       </section>
 
       <div className="rounded border border-cyan-300/15 bg-cyan-300/[0.04] p-4 text-sm text-slate-300">
-        <span className="font-semibold text-cyan-200">SDK coming soon.</span>{" "}
-        A typed TypeScript SDK is planned. For now, use the Node.js wrapper above or the raw fetch API.
+        <span className="font-semibold text-cyan-200">SDK helper available.</span>{" "}
+        The TypeScript SDK exposes <code className="font-mono">checkAction</code>, <code className="font-mono">guardAction</code>, and <code className="font-mono">executeAction</code>. Use <code className="font-mono">executeAction</code> when you want the full run lifecycle.
         Follow{" "}
         <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="text-cyan-200 underline">github.com/12ziyad</a>{" "}
         for updates.

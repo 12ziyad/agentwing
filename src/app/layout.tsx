@@ -15,8 +15,13 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentWing — 2-phase commit for AI agents",
-  description: "Same agent. Same task. Different outcome. AgentWing turns agent actions into transactions: checked, reversible, auditable, and feedback-driven.",
+  title: "AgentWing - Guarded execution for AI agents",
+  description: "AgentWing checks and routes AI-agent execution before tools run: policy decisions, approvals, sandbox routing, restore points, logs, and audit receipts.",
+  icons: {
+    icon: "/agentwing-icon.png",
+    shortcut: "/agentwing-icon.png",
+    apple: "/agentwing-icon.png",
+  },
 };
 
 export default function RootLayout({

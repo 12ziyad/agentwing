@@ -97,6 +97,86 @@ export type ActionReceipt = {
   createdAt: string;
 };
 
+export const actionRunStatuses = [
+  "proposed",
+  "checked",
+  "blocked",
+  "waiting_approval",
+  "approved",
+  "rejected",
+  "waiting_sandbox",
+  "running",
+  "completed",
+  "failed",
+  "restore_point_required",
+  "checkpoint_created",
+  "execution_skipped",
+  "external_runner_required",
+] as const;
+
+export type ActionRunStatus = (typeof actionRunStatuses)[number];
+
+export type ExecutionTarget = "none" | "sandbox" | "local_runner" | "external_runner" | "skipped";
+
+export type ExecutionEvent = {
+  eventId: string;
+  runId: string;
+  eventType: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type RuntimeApprovalSurface = "cli" | "ide" | "web" | "webhook";
+
+export type RunnerApproval = {
+  approvalId?: string;
+  approvalUrl: string;
+  surface: "dashboard_and_runner";
+  runnerApprovalToken: string;
+  expiresAt: string;
+  approveEndpoint: string;
+  rejectEndpoint: string;
+};
+
+export type ActionRun = {
+  runId: string;
+  workspaceId: string;
+  projectId?: string;
+  apiKeyId?: string;
+  receiptId?: string;
+  approvalId?: string;
+  action: AgentAction;
+  decision: AgentWingDecision;
+  risk: AgentWingRisk;
+  policy: string;
+  feedback?: string;
+  nextStep?: string;
+  status: ActionRunStatus;
+  executionTarget: ExecutionTarget;
+  sandboxProvider?: string;
+  sandboxRunId?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  executionLogs?: ExecutionEvent[];
+  errorMessage?: string;
+  durationMs?: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  approvalSource?: string;
+};
+
+export type ActionRunStats = {
+  total: number;
+  completed: number;
+  blocked: number;
+  waitingApproval: number;
+  sandboxRuns: number;
+  externalRunnerRequired: number;
+};
+
 export type ReceiptStats = {
   total: number;
   blocked: number;
@@ -151,6 +231,7 @@ export type SandboxProviderConfig = {
   updatedAt?: string;
   lastTestStatus?: SandboxTestStatus;
   lastTestedAt?: string;
+  lastError?: string;
   runtimeExecutionEnabled: boolean;
   e2bKeySaved: boolean;
   e2bKeyLast4?: string;

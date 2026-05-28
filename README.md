@@ -1,44 +1,79 @@
 # AgentWing
 
-**Runtime control and sandbox routing layer for AI agents.**
+**Guarded execution control layer for AI agents.**
 
-AgentWing sits between an AI agent and the tools/actions it wants to execute.  
-Before an agent reads files, runs commands, edits code, installs packages, or touches infrastructure, AgentWing checks the action and returns a runtime decision.
+AgentWing sits between an AI agent and the tools/actions it wants to execute. Before an agent reads files, runs commands, edits code, installs packages, sends messages, touches data, or deploys, AgentWing checks and routes the action.
 
 ## What AgentWing does
 
-- Checks agent actions before execution
-- Blocks risky actions like secret file access
-- Routes unsafe commands to sandbox
-- Supports approval-required decisions
-- Creates receipts for every checked action
-- Gives feedback so agents can re-plan safely
+- Checks agent actions before tools run
+- Blocks risky actions like secret file access and destructive commands
+- Creates action runs for managed execution lifecycle tracking
+- Routes `sandbox_required` shell/package/code actions to BYOK E2B when connected
+- Pauses `approval_required` actions until a human approves
+- Requires restore points before sensitive file/config changes
+- Captures logs/output/status when execution is performed
+- Creates auditable receipts for checks and runs
 
 ## Runtime flow
 
 ```txt
 Agent proposes action
-→ AgentWing checks policy
-→ AgentWing returns decision
-→ Agent executes / stops / asks approval / uses sandbox
-→ Receipt is saved
+-> AgentWing evaluates policy
+-> AgentWing creates an action run
+-> Action is blocked / approved / sandboxed / checkpointed / skipped
+-> Execution result or next safe step is recorded
+-> Receipt is sealed
 ```
 
-## How to integrate
+## APIs
 
-### 1. Open AgentWing
+### Lightweight decision API
 
-[agentwing.gpmai.dev](https://agentwing.gpmai.dev)
+`POST /api/v1/check-action`
 
-Sign in with Google and create a project.
+Returns one of:
 
-### 2. Generate an API key
+```txt
+allow
+block
+sandbox_required
+approval_required
+restore_point_required
+```
 
-Go to **Dashboard → API Keys** and generate a key.
+This endpoint remains the smallest integration point: send a proposed action and receive a decision, feedback, next step, and receipt ID.
 
-Keep it safe. The full key is shown only once.
+### Managed lifecycle API
 
-### 3. Call AgentWing before every agent action
+`POST /api/v1/execute-action`
+
+Creates an action run and advances it safely:
+
+- `block` -> run status `blocked`; no execution
+- `allow` -> safe read/check actions become `execution_skipped`; other tools require an explicit external runner
+- `sandbox_required` -> runs in E2B only if BYOK E2B is connected; otherwise `waiting_sandbox`
+- `approval_required` -> creates an approval and waits in `waiting_approval`
+- `restore_point_required` -> waits for a real restore point or external runner continuation
+
+Hosted AgentWing does not execute arbitrary shell commands on the server.
+
+For terminal or IDE runners, include a runtime approval surface:
+
+```json
+{
+  "action": { "...": "same AgentAction shape" },
+  "runtime": {
+    "surface": "cli",
+    "interactiveApproval": true,
+    "runnerId": "my-local-runner"
+  }
+}
+```
+
+When the decision is `approval_required`, AgentWing returns a short-lived one-time runner approval token and runner approve/reject endpoints. The normal API key creates the run but cannot approve it by itself.
+
+## Example check
 
 ```bash
 curl -X POST https://agentwing.gpmai.dev/api/v1/check-action \
@@ -55,61 +90,57 @@ curl -X POST https://agentwing.gpmai.dev/api/v1/check-action \
   }'
 ```
 
-### 4. Handle the decision
+## Example managed run
 
-```txt
-allow → execute action
-block → stop action
-approval_required → ask human approval
-sandbox_required → run in sandbox
-restore_point_required → create checkpoint first
+```bash
+curl -X POST https://agentwing.gpmai.dev/api/v1/execute-action \
+  -H "Authorization: Bearer YOUR_AGENTWING_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectId": "YOUR_PROJECT_ID",
+    "sessionId": "demo-session",
+    "agentId": "coding-agent",
+    "actionType": "package_install",
+    "tool": "npm",
+    "command": "npm install lodash"
+  }'
 ```
 
-Example response:
-
-```json
-{
-  "decision": "block",
-  "risk": "high",
-  "policy": "block-secret-file-access",
-  "feedback": "Secret-bearing files such as .env are blocked before contents can be exposed.",
-  "receiptId": "aw_receipt_xxx",
-  "nextStep": "Stop this action and re-plan without reading secret-bearing files."
-}
-```
+Open `/dashboard/runs/{runId}` to see the full lifecycle: proposed action, decision, approval/sandbox/checkpoint path, execution status, logs, and receipt.
 
 ## Sandbox behavior
 
-AgentWing does not replace sandbox providers.
+AgentWing does not replace sandbox providers. It decides when an action needs sandbox execution.
 
-It decides **when** an action should be sandboxed.
+If BYOK E2B is connected, `sandbox_required` shell/package/code actions run in E2B and AgentWing captures stdout, stderr, exit code, duration, and receipt metadata.
 
-If a sandbox is connected, route `sandbox_required` actions there.  
-If no sandbox is connected, do not run those actions locally.
+If E2B is not connected, AgentWing sets the run to `waiting_sandbox` and does not run the action locally.
+
+## Local runner behavior
+
+Local execution is explicit. The SDK/example runner can continue a run only when the caller provides a local runner callback. AgentWing never silently runs shell commands on the hosted server.
+
+Examples:
+
+- `examples/guarded-runner` shows the managed run lifecycle.
+- `examples/runtime-approval` shows terminal approval with the one-time runner token.
 
 ## Status
 
-**AgentWing public beta is live.**
+AgentWing public beta is live:
 
-You can test it here:
+https://agentwing.gpmai.dev
 
-[agentwing.gpmai.dev](https://agentwing.gpmai.dev)
-
-Try the flow:
-
-1. Sign in with Google
-2. Create a project
-3. Generate an API key
-4. Call `/api/v1/check-action` before your agent executes an action
-5. View receipts and usage in the dashboard
-
-AgentWing currently includes:
+Current beta includes:
 
 - Google sign-in
 - projects and API keys
-- runtime action check API
+- `/api/v1/check-action`
+- `/api/v1/execute-action`
+- action runs dashboard
 - default safety policies
 - custom policies
+- inline approval gates
 - receipts and usage tracking
 - BYOK E2B sandbox connection
 

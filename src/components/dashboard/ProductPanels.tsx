@@ -88,6 +88,11 @@ function maskedSandboxKey(config: SandboxConfig) {
   return `${config.keyPrefix ?? "e2b_"}••••${last4}`;
 }
 
+function maskedProjectId(projectId?: string) {
+  if (!projectId) return "Workspace scoped";
+  return projectId.length > 10 ? `${projectId.slice(0, 6)}...${projectId.slice(-4)}` : "Project scoped";
+}
+
 function statusPillClass(kind: "connected" | "empty" | "success" | "failed") {
   const classes = {
     connected: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
@@ -297,7 +302,7 @@ export function ApiKeysPanel() {
               className="grid grid-cols-[1fr_1fr_0.8fr_0.9fr_auto] items-center gap-3 border-b border-white/[0.06] px-4 py-3 text-sm last:border-b-0"
             >
               <span className="font-mono text-xs text-cyan-100">{key.keyPrefix}</span>
-              <span className="font-mono text-xs text-slate-400">{key.projectId}</span>
+              <span className="font-mono text-xs text-slate-400">{maskedProjectId(key.projectId)}</span>
               <span className="text-slate-300">{key.planName}</span>
               <span className="text-xs text-slate-500">{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : "Never"}</span>
               <button
@@ -366,14 +371,19 @@ const { decision, risk, policy, receiptId } = await r.json();`}</pre>
 
 const DECISION_OPTIONS = ["allow", "block", "approval_required", "sandbox_required", "restore_point_required"];
 const RISK_OPTIONS = ["low", "medium", "high", "critical"];
-const ACTION_TYPES = ["", "file_access", "shell_command", "api_call", "browser_action", "database_query", "message_send", "payment_action", "deploy_action", "custom_action"];
+const ACTION_TYPES = ["", "file_access", "shell_command", "api_call", "network_request", "browser_action", "database_query", "database_operation", "message_send", "payment_action", "deploy_action", "git_operation", "package_install", "code_execution", "config_change", "agent_spawn", "custom_action"];
 
-const EXAMPLE_POLICIES = [
-  { name: "Block .env access", actionType: "file_access", targetPattern: "*.env*", decision: "block", risk: "high", feedback: "Secret-bearing .env files are blocked.", priority: 10 },
-  { name: "Require approval for npm install", actionType: "shell_command", commandPattern: "npm install*", decision: "approval_required", risk: "medium", feedback: "npm install requires human approval.", priority: 20 },
-  { name: "Sandbox unknown shell commands", actionType: "shell_command", decision: "sandbox_required", risk: "medium", feedback: "Unknown shell commands run in sandbox first.", priority: 50 },
-  { name: "Block rm -rf", actionType: "shell_command", commandPattern: "rm -rf*", decision: "block", risk: "critical", feedback: "rm -rf is blocked unconditionally.", priority: 5 },
-  { name: "Restore point before package.json edit", actionType: "file_access", targetPattern: "*package.json*", decision: "restore_point_required", risk: "medium", feedback: "Create a restore point before editing package.json.", priority: 30 },
+const DEFAULT_POLICIES = [
+  { name: "Block .env / secret file access", actionType: "file_access", targetPattern: "*.env*", decision: "block", risk: "high", feedback: "Secret-bearing files are blocked before contents can be exposed.", priority: 5, mandatory: true },
+  { name: "Block rm -rf / destructive commands", actionType: "shell_command", commandPattern: "rm -rf*", decision: "block", risk: "critical", feedback: "Destructive system-level commands are blocked.", priority: 5, mandatory: true },
+  { name: "Sandbox unknown shell commands", actionType: "shell_command", commandPattern: "*", decision: "sandbox_required", risk: "medium", feedback: "Unknown shell commands must run in sandbox first.", priority: 50 },
+  { name: "Sandbox npm install / package installs", actionType: "package_install", commandPattern: "npm install*", decision: "sandbox_required", risk: "medium", feedback: "Package installs must run in sandbox first.", priority: 30 },
+  { name: "Approval required for deploy actions", actionType: "deploy_action", decision: "approval_required", risk: "high", feedback: "Deploy actions require human approval.", priority: 20 },
+  { name: "Approval required for payment actions", actionType: "payment_action", decision: "approval_required", risk: "high", feedback: "Payment actions require explicit approval.", priority: 20 },
+  { name: "Approval required for external messages", actionType: "message_send", decision: "approval_required", risk: "medium", feedback: "External messages require human approval.", priority: 30 },
+  { name: "Restore point before config changes", actionType: "config_change", targetPattern: "*", decision: "restore_point_required", risk: "medium", feedback: "Create a restore point before changing configuration.", priority: 30 },
+  { name: "Restore point before package.json edits", actionType: "file_access", targetPattern: "*package.json*", decision: "restore_point_required", risk: "medium", feedback: "Create a restore point before editing package manifests.", priority: 30 },
+  { name: "Block force push", actionType: "git_operation", commandPattern: "*push*--force*", decision: "block", risk: "high", feedback: "Force pushes are blocked. Use a pull request.", priority: 10, mandatory: true },
 ];
 
 type PolicyFormData = {
@@ -510,8 +520,51 @@ export function PoliciesPanel() {
     <div className="space-y-5">
       <PageHeading
         title="Policies"
-        copy="Critical default safety blocks run first. Custom policies then match before the remaining default AgentWing ruleset. Higher priority = matched first (lower number = higher priority)."
+        copy="Default safety policies run first for critical blocks. Custom policies let you control how agent actions are allowed, blocked, sandboxed, approved, or checkpointed."
       />
+
+      <section className={cardClass()}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-white">Prebuilt default policies</p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+              These production defaults are active in the policy engine. Mandatory hard blocks run before custom rules; custom policies can add workspace-specific routing after that.
+            </p>
+          </div>
+          <span className="rounded border border-emerald-300/25 bg-emerald-300/[0.08] px-2 py-1 text-xs font-semibold text-emerald-100">
+            Active by default
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {DEFAULT_POLICIES.map((policy) => (
+            <button
+              key={policy.name}
+              type="button"
+              onClick={() => openCreate(policy)}
+              className="rounded-md border border-white/[0.08] bg-[#05070d] p-4 text-left transition hover:border-cyan-300/20"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-white">{policy.name}</p>
+                {policy.mandatory && (
+                  <span className="rounded border border-red-300/20 bg-red-400/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-red-100">
+                    mandatory
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${decisionClass[policy.decision]}`}>
+                  {policy.decision}
+                </span>
+                <span className={`text-xs font-semibold ${riskClass[policy.risk] ?? "text-slate-300"}`}>
+                  {policy.risk}
+                </span>
+                <span className="font-mono text-[11px] text-slate-500">{policy.actionType}</span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">{policy.feedback}</p>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <div className="flex flex-wrap items-center gap-3">
         <select
@@ -530,7 +583,7 @@ export function PoliciesPanel() {
           className="inline-flex items-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-3 py-2 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200"
         >
           <Plus className="size-4" />
-          Add policy
+          Add custom policy
         </button>
       </div>
 
@@ -656,9 +709,9 @@ export function PoliciesPanel() {
           <p className="mt-2 text-sm text-slate-400">
             Default AgentWing policies apply. Add custom policies to override or extend them for your workspace.
           </p>
-          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Examples</p>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Default policy templates</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {EXAMPLE_POLICIES.map((ex) => (
+            {DEFAULT_POLICIES.map((ex) => (
               <button
                 key={ex.name}
                 type="button"
@@ -1020,7 +1073,7 @@ export function ReceiptsPanel() {
     <div className="space-y-5">
       <PageHeading
         title="Action Receipts"
-        copy="Audit trail for every check made through /api/v1/check-action."
+        copy="Audit trail for checks and managed action runs. Receipts capture the decision, policy, feedback, and execution result when available."
       />
       <StatsGrid stats={stats} />
       <ReceiptsTable receipts={receipts} />
@@ -1091,7 +1144,7 @@ export function ProjectsPanel() {
           {projects.map((project) => (
             <article key={project.projectId} className={cardClass()}>
               <p className="text-sm font-semibold text-white">{project.name}</p>
-              <p className="mt-2 font-mono text-xs text-cyan-100">{project.projectId}</p>
+              <p className="mt-2 font-mono text-xs text-cyan-100">{maskedProjectId(project.projectId)}</p>
               <p className="mt-2 text-xs text-slate-400">
                 Created {new Date(project.createdAt).toLocaleString()}
               </p>
@@ -1212,7 +1265,7 @@ export function ReceiptsTable({ receipts }: { receipts: ActionReceipt[] }) {
         <span>Time</span>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-slate-400">No receipts yet. Call POST /api/v1/check-action with your API key.</p>
+        <p className="px-4 py-8 text-sm text-slate-400">No receipts yet. Call POST /api/v1/check-action or /api/v1/execute-action with your API key.</p>
       ) : (
         rows.map((receipt) => (
           <Link

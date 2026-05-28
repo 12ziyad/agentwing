@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
-const CONFIRMATION_TEXT = "DELETE MY ACCOUNT";
+const CONFIRMATION_TEXT = "DELETE";
 
 export function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -32,6 +31,7 @@ export function CopyButton({ value }: { value: string }) {
 export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedAt?: string }) {
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [status, setStatus] = useState(
     deletionRequestedAt
       ? `Account deletion requested on ${new Date(deletionRequestedAt).toLocaleString()}.`
@@ -54,6 +54,7 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
 
       setRequested(true);
       setStatus(`${data.message ?? "Your account deletion request has been recorded."} Signing you out...`);
+      setConfirmOpen(false);
       window.setTimeout(() => {
         void fetch("/api/auth/signout", { method: "POST" }).finally(() => {
           window.location.href = "/";
@@ -67,104 +68,73 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
   }
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <DangerLink
-          href="/dashboard/api-keys"
-          label="Revoke individual API keys"
-          description="Use the API Keys page to revoke active keys safely."
-        />
-        <DangerLink
-          href="/dashboard/sandboxes"
-          label="Remove sandbox credentials"
-          description="Use the Sandboxes page to remove encrypted BYOK credentials."
-        />
-        <DangerLink
-          href="mailto:founder@gpmai.dev?subject=Workspace deletion request"
-          label="Request workspace deletion"
-          description="During beta, workspace deletion is completed after team review."
-          external
-        />
-        <DangerLink
-          href="mailto:founder@gpmai.dev?subject=Data export request"
-          label="Request data export"
-          description="Email the AgentWing team to request an export."
-          external
-        />
-      </div>
-
+    <>
       <div className="rounded-md border border-red-300/20 bg-red-400/[0.04] p-4">
-        <p className="text-sm font-semibold text-red-100">Request account deletion</p>
-        <p className="mt-2 text-sm leading-6 text-slate-300">
-          Deleting your account may permanently remove your workspace, projects, API keys, policies, receipts,
-          sandbox credentials, usage data, and events. This action may not be reversible.
-        </p>
-        <p className="mt-2 text-xs text-slate-500">
-          During beta, deletion is completed by the AgentWing team after request review.
+        <p className="text-sm font-semibold text-red-100">Delete account</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+          Permanently delete your workspace, API keys, runs, receipts, and settings. This cannot be undone.
         </p>
 
-        <label htmlFor="delete-confirmation" className="mt-4 block text-xs font-medium text-slate-400">
-          Type DELETE MY ACCOUNT to confirm
-        </label>
-        <input
-          id="delete-confirmation"
-          value={confirmation}
-          onChange={(event) => setConfirmation(event.target.value)}
+        <button
+          type="button"
           disabled={busy || requested}
-          className="mt-2 min-h-10 w-full rounded-md border border-red-300/20 bg-[#05070d] px-3 font-mono text-sm text-slate-100 outline-none focus:border-red-300/40 disabled:opacity-60"
-        />
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            disabled={!confirmed || busy || requested}
-            onClick={requestDeletion}
-            className="rounded-md border border-red-300/30 bg-red-400/[0.12] px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/[0.18] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {requested ? "Deletion requested" : busy ? "Requesting..." : "Request account deletion"}
-          </button>
-          <form action="/api/auth/signout" method="post">
-            <button
-              type="submit"
-              className="rounded-md border border-white/[0.1] px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
+          onClick={() => {
+            setConfirmation("");
+            setConfirmOpen(true);
+          }}
+          className="mt-4 rounded-md border border-red-300/30 bg-red-400/[0.12] px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/[0.18] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {requested ? "Deletion requested" : "Delete account"}
+        </button>
 
         {status && <p className="mt-3 text-sm text-slate-300">{status}</p>}
       </div>
-    </div>
-  );
-}
 
-function DangerLink({
-  href,
-  label,
-  description,
-  external,
-}: {
-  href: string;
-  label: string;
-  description: string;
-  external?: boolean;
-}) {
-  const className = "block rounded border border-red-300/20 px-4 py-3 transition hover:border-red-300/40 hover:bg-red-400/[0.04]";
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-md border border-red-300/25 bg-[#080b12] p-6 shadow-2xl">
+            <p className="text-lg font-semibold text-red-100">Confirm account deletion</p>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              This records an irreversible deletion request for your account and workspace. Type DELETE to confirm.
+            </p>
 
-  if (external) {
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
-        <p className="text-xs font-semibold text-red-200">{label}</p>
-        <p className="mt-0.5 text-[11px] text-slate-500">{description}</p>
-      </a>
-    );
-  }
+            <label htmlFor="delete-confirmation" className="mt-5 block text-xs font-medium text-slate-400">
+              Type DELETE to confirm
+            </label>
+            <input
+              id="delete-confirmation"
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              disabled={busy || requested}
+              placeholder="DELETE"
+              className="mt-2 min-h-11 w-full rounded-md border border-red-300/20 bg-[#05070d] px-3 font-mono text-sm text-slate-100 outline-none focus:border-red-300/40 disabled:opacity-60"
+              autoFocus
+            />
 
-  return (
-    <Link href={href} className={className}>
-      <p className="text-xs font-semibold text-red-200">{label}</p>
-      <p className="mt-0.5 text-[11px] text-slate-500">{description}</p>
-    </Link>
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setConfirmOpen(false);
+                  setConfirmation("");
+                }}
+                className="rounded-md border border-white/[0.1] px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!confirmed || busy || requested}
+                onClick={requestDeletion}
+                className="rounded-md border border-red-300/30 bg-red-400/[0.14] px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/[0.2] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy ? "Deleting..." : "Delete permanently"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -4,10 +4,10 @@ import Link from "next/link";
 import { PublicNav, PublicFooter } from "@/components/PublicLayout";
 
 const controlFlow = [
-  { label: "Agent proposes action", sub: "file_access · shell_command · network_call · …" },
-  { label: "Policy check", sub: "Custom policies · Default ruleset" },
-  { label: "Decision engine", sub: "block · approval_required · sandbox_required · allow" },
-  { label: "Audit receipt sealed", sub: "Risk · policy · feedback · receiptId" },
+  { label: "Agent proposes action", sub: "file_access / shell_command / network_call" },
+  { label: "Policy decision", sub: "Default blocks / Custom policies" },
+  { label: "Guarded route", sub: "approval / sandbox / checkpoint / external runner" },
+  { label: "Execution lifecycle", sub: "logs / result / sealed receipt" },
 ];
 
 const decisions = [
@@ -24,7 +24,7 @@ const features = [
   { title: "BYOK Sandbox routing", body: "Bring your own E2B API key. Unsafe actions are routed to isolated execution before touching production." },
   { title: "Restore points", body: "Before mutating files, state, or config, AgentWing signals the agent to create a checkpoint first." },
   { title: "Structured feedback", body: "Every decision includes human-readable feedback and a next step the agent can use to re-plan." },
-  { title: "Audit receipts", body: "Every check-action call creates a receipt: decision, risk, policy, action metadata — scoped to your workspace." },
+  { title: "Audit receipts", body: "Every check or execution run creates a receipt: decision, risk, policy, action metadata, and execution result when available." },
 ];
 
 export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
@@ -41,10 +41,10 @@ export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
               AgentWing
             </h1>
             <p className="mt-4 text-xl font-medium text-slate-300">
-              Runtime control layer for AI agents.
+              Guarded execution for AI agents.
             </p>
             <p className="mt-5 max-w-lg text-base leading-7 text-slate-400">
-              AgentWing intercepts agent tool calls before execution and applies policy, approval gates, sandbox routing, restore points, structured feedback, and audit receipts.
+              AgentWing checks and routes execution before tools run. It blocks dangerous actions, routes risky actions to sandbox, requests approval when needed, requires restore points for sensitive changes, and records the full receipt.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               {isSignedIn ? (
@@ -134,7 +134,7 @@ export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
       {/* Features */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">What AgentWing does</p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">Runtime controls, not just guardrails</h2>
+        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">Runtime controls for the full execution path</h2>
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {features.map(({ title, body }) => (
             <div key={title} className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
@@ -151,10 +151,10 @@ export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
           <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">One API call</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">Add runtime control in minutes</h2>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">Add guarded execution in minutes</h2>
               <p className="mt-4 text-base leading-7 text-slate-400">
-                Before your agent executes any action, call <span className="font-mono text-cyan-100">/api/v1/check-action</span>.
-                AgentWing returns a decision in milliseconds. No SDK required.
+                Use <span className="font-mono text-cyan-100">/api/v1/check-action</span> for lightweight policy decisions, or <span className="font-mono text-cyan-100">/api/v1/execute-action</span> to create a managed action run.
+                Sandbox execution runs in connected E2B BYOK; hosted AgentWing does not run arbitrary commands locally.
               </p>
               <div className="mt-6 flex gap-3">
                 <Link href="/docs" className="rounded border border-white/[0.1] px-4 py-2 text-sm font-semibold text-slate-200 transition hover:text-white">

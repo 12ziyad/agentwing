@@ -154,7 +154,7 @@ async function run() {
 
     if (result.decision === "approval_required") {
       console.log(`Approval required. approvalId=${result.approvalId || "not returned"}`);
-      console.log("Open /dashboard/approvals before continuing.");
+      console.log("Open /dashboard/runs for the managed run approval flow.");
       continue;
     }
 
