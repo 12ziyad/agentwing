@@ -1,36 +1,31 @@
 import { rejectRunWithRunnerToken } from "@/lib/actionRunLifecycle";
 import { trackEvent } from "@/lib/agentwingStore";
+import { extractRunnerToken, reasonFromBody } from "@/lib/runnerTokenAuth";
 
 export const runtime = "nodejs";
-
-function tokenFromBody(body: unknown) {
-  if (!body || typeof body !== "object") return undefined;
-  const value = (body as Record<string, unknown>).runnerApprovalToken ?? (body as Record<string, unknown>).token;
-  return typeof value === "string" ? value : undefined;
-}
-
-function reasonFromBody(body: unknown) {
-  if (!body || typeof body !== "object") return undefined;
-  const value = (body as Record<string, unknown>).reason;
-  return typeof value === "string" ? value.slice(0, 500) : undefined;
-}
 
 export async function POST(request: Request, { params }: { params: Promise<{ runId: string }> }) {
   let body: unknown;
   try {
-    body = await request.json();
+    const text = await request.text();
+    body = text ? JSON.parse(text) : {};
   } catch {
-    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+    return Response.json({ error: "Invalid JSON body.", code: "invalid_request" }, { status: 400 });
   }
 
-  const token = tokenFromBody(body);
-  if (!token) {
-    return Response.json({ error: "runnerApprovalToken is required." }, { status: 401 });
+  const tokenResult = extractRunnerToken(request, body);
+  if (!tokenResult.ok) {
+    return Response.json(
+      { error: "Runner approval token is required.", code: tokenResult.code },
+      { status: tokenResult.status },
+    );
   }
 
   const { runId } = await params;
-  const result = await rejectRunWithRunnerToken(runId, token, reasonFromBody(body));
-  if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
+  const result = await rejectRunWithRunnerToken(runId, tokenResult.token, reasonFromBody(body));
+  if (!result.ok) {
+    return Response.json({ error: result.error, code: result.code ?? "invalid_runner_token" }, { status: result.status });
+  }
 
   await trackEvent("runner_approval_rejected", {
     workspaceId: result.run.workspaceId,
@@ -38,8 +33,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ run
     metadata: { runId, status: result.run.status },
   });
 
-  return Response.json({
-    run: result.run,
-    nextStep: result.run.nextStep ?? "Action rejected. Do not execute this operation.",
-  });
+  return Response.json({ ok: true, run: result.run });
 }

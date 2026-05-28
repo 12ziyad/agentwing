@@ -1962,10 +1962,13 @@ export async function createRunnerApprovalToken(opts: {
   return { token, expiresAt };
 }
 
+type ConsumeTokenFailure = { ok: false; error: string; status: number; code: string };
+type ConsumeTokenSuccess = { ok: true; run: ActionRun; source: string; runnerId?: string };
+
 export async function consumeRunnerApprovalToken(
   runId: string,
   token: string,
-): Promise<{ ok: true; run: ActionRun; source: string; runnerId?: string } | { ok: false; error: string; status: number }> {
+): Promise<ConsumeTokenSuccess | ConsumeTokenFailure> {
   const tokenHash = await sha256(token);
   const now = nowIso();
   const db = await getDb();
@@ -1981,18 +1984,18 @@ export async function consumeRunnerApprovalToken(
         .bind(runId, tokenHash)
         .first<RunnerApprovalTokenRow>();
 
-      if (!row) return { ok: false, error: "Runner approval token is invalid.", status: 401 };
+      if (!row) return { ok: false, error: "Runner approval token is invalid.", status: 401, code: "invalid_runner_token" };
       const record = mapRunnerApprovalTokenRow(row);
-      if (record.usedAt) return { ok: false, error: "Runner approval token has already been used.", status: 401 };
-      if (Date.parse(record.expiresAt) <= Date.now()) return { ok: false, error: "Runner approval token has expired.", status: 401 };
+      if (record.usedAt) return { ok: false, error: "Runner approval token has already been used.", status: 409, code: "runner_token_already_used" };
+      if (Date.parse(record.expiresAt) <= Date.now()) return { ok: false, error: "Runner approval token has expired.", status: 401, code: "expired_runner_token" };
 
       const run = await getActionRun(runId, record.workspaceId);
-      if (!run) return { ok: false, error: "Run not found.", status: 404 };
+      if (!run) return { ok: false, error: "Run not found.", status: 404, code: "run_not_found" };
       if (run.status === "blocked" || run.decision === "block") {
-        return { ok: false, error: "Blocked actions cannot be approved.", status: 403 };
+        return { ok: false, error: "Blocked actions cannot be approved.", status: 409, code: "blocked_action_cannot_be_approved" };
       }
       if (run.status !== "waiting_approval") {
-        return { ok: false, error: "Run is not waiting for approval.", status: 409 };
+        return { ok: false, error: "Run is not waiting for approval.", status: 409, code: "run_not_waiting_approval" };
       }
 
       const updateResult = await db
@@ -2001,7 +2004,7 @@ export async function consumeRunnerApprovalToken(
         .run();
       const changes = (updateResult as { meta?: { changes?: number } }).meta?.changes;
       if (typeof changes === "number" && changes < 1) {
-        return { ok: false, error: "Runner approval token has already been used.", status: 401 };
+        return { ok: false, error: "Runner approval token has already been used.", status: 409, code: "runner_token_already_used" };
       }
 
       return { ok: true, run, source: `runner_${record.surface}`, runnerId: record.runnerId };
@@ -2011,17 +2014,17 @@ export async function consumeRunnerApprovalToken(
   }
 
   const record = getState().runnerApprovalTokens.find((candidate) => candidate.runId === runId && candidate.tokenHash === tokenHash);
-  if (!record) return { ok: false, error: "Runner approval token is invalid.", status: 401 };
-  if (record.usedAt) return { ok: false, error: "Runner approval token has already been used.", status: 401 };
-  if (Date.parse(record.expiresAt) <= Date.now()) return { ok: false, error: "Runner approval token has expired.", status: 401 };
+  if (!record) return { ok: false, error: "Runner approval token is invalid.", status: 401, code: "invalid_runner_token" };
+  if (record.usedAt) return { ok: false, error: "Runner approval token has already been used.", status: 409, code: "runner_token_already_used" };
+  if (Date.parse(record.expiresAt) <= Date.now()) return { ok: false, error: "Runner approval token has expired.", status: 401, code: "expired_runner_token" };
 
   const run = await getActionRun(runId, record.workspaceId);
-  if (!run) return { ok: false, error: "Run not found.", status: 404 };
+  if (!run) return { ok: false, error: "Run not found.", status: 404, code: "run_not_found" };
   if (run.status === "blocked" || run.decision === "block") {
-    return { ok: false, error: "Blocked actions cannot be approved.", status: 403 };
+    return { ok: false, error: "Blocked actions cannot be approved.", status: 409, code: "blocked_action_cannot_be_approved" };
   }
   if (run.status !== "waiting_approval") {
-    return { ok: false, error: "Run is not waiting for approval.", status: 409 };
+    return { ok: false, error: "Run is not waiting for approval.", status: 409, code: "run_not_waiting_approval" };
   }
 
   record.usedAt = now;

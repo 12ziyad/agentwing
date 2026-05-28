@@ -82,6 +82,24 @@ export type ActionRun = {
   durationMs?: number;
 };
 
+export type RuntimeApprovalSurface = "cli" | "ide" | "web" | "webhook";
+
+export type RunnerApproval = {
+  approvalId?: string;
+  approvalUrl: string;
+  surface: "dashboard_and_runner";
+  runnerApprovalToken: string;
+  expiresAt: string;
+  approveEndpoint: string;
+  rejectEndpoint: string;
+};
+
+export type ApprovalDecision = "approve" | "reject";
+
+export type ApprovalDecisionResult =
+  | ApprovalDecision
+  | { decision: ApprovalDecision; reason?: string };
+
 export type AgentWingOptions = {
   apiKey: string;
   baseUrl?: string;
@@ -105,12 +123,35 @@ export type ExecuteActionOptions<T = unknown> = {
     durationMs?: number;
     error?: string;
   };
+  runtime?: {
+    surface: RuntimeApprovalSurface;
+    interactiveApproval?: boolean;
+    runnerId?: string;
+    approvalTimeoutMs?: number;
+    onApprovalRequired?: (ctx: {
+      run: ActionRun;
+      approval: RunnerApproval;
+    }) =>
+      | Promise<ApprovalDecisionResult>
+      | ApprovalDecisionResult;
+  };
 };
 
 export type ExecuteActionResult<T = unknown> = {
   run: ActionRun;
   localResult?: T;
+  timedOut?: boolean;
 };
+
+export class AgentWingError extends Error {
+  readonly code: string;
+
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "AgentWingError";
+    this.code = code;
+  }
+}
 
 export class AgentWing {
   private readonly apiKey: string;
@@ -123,7 +164,7 @@ export class AgentWing {
     }
 
     this.apiKey = options.apiKey;
-    this.baseUrl = (options.baseUrl ?? "https://api.agentwing.dev").replace(/\/$/, "");
+    this.baseUrl = (options.baseUrl ?? "https://agentwing.gpmai.dev").replace(/\/$/, "");
     this.fetcher = options.fetch ?? fetch;
   }
 
@@ -138,7 +179,11 @@ export class AgentWing {
     });
 
     if (!response.ok) {
-      throw new Error(`AgentWing checkAction failed with ${response.status}`);
+      const data = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      throw new AgentWingError(
+        data.error ?? `AgentWing checkAction failed with ${response.status}`,
+        data.code ?? "request_failed",
+      );
     }
 
     return response.json() as Promise<CheckActionResult>;
@@ -150,7 +195,11 @@ export class AgentWing {
     });
 
     if (!response.ok) {
-      throw new Error(`AgentWing getActionRun failed with ${response.status}`);
+      const data = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      throw new AgentWingError(
+        data.error ?? `AgentWing getActionRun failed with ${response.status}`,
+        data.code ?? "request_failed",
+      );
     }
 
     const data = (await response.json()) as { run: ActionRun };
@@ -171,7 +220,37 @@ export class AgentWing {
     });
 
     if (!response.ok) {
-      throw new Error(`AgentWing continueActionRun failed with ${response.status}`);
+      const data = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      throw new AgentWingError(
+        data.error ?? `AgentWing continueActionRun failed with ${response.status}`,
+        data.code ?? "request_failed",
+      );
+    }
+
+    const data = (await response.json()) as { run: ActionRun };
+    return data.run;
+  }
+
+  private async postRunnerDecision(
+    endpoint: string,
+    runnerApprovalToken: string,
+    reason?: string,
+  ): Promise<ActionRun> {
+    const response = await this.fetcher(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${runnerApprovalToken}`,
+      },
+      body: JSON.stringify(reason ? { reason } : {}),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      throw new AgentWingError(
+        data.error ?? `Runner decision failed with ${response.status}`,
+        data.code ?? "runner_decision_failed",
+      );
     }
 
     const data = (await response.json()) as { run: ActionRun };
@@ -182,24 +261,89 @@ export class AgentWing {
     action: AgentAction,
     options: ExecuteActionOptions<T> = {},
   ): Promise<ExecuteActionResult<T>> {
+    const runtimeOpts = options.runtime;
+
+    // Build the request body — include runtime block only when configured
+    const requestBody: Record<string, unknown> = { ...action };
+    if (runtimeOpts) {
+      requestBody.runtime = {
+        surface: runtimeOpts.surface,
+        interactiveApproval: true,
+        ...(runtimeOpts.runnerId ? { runnerId: runtimeOpts.runnerId } : {}),
+      };
+    }
+
     const response = await this.fetcher(`${this.baseUrl}/api/v1/execute-action`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify(action),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      throw new Error(`AgentWing executeAction failed with ${response.status}`);
+      const data = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      throw new AgentWingError(
+        data.error ?? `AgentWing executeAction failed with ${response.status}`,
+        data.code ?? "request_failed",
+      );
     }
 
-    const data = (await response.json()) as { run: ActionRun };
+    const data = (await response.json()) as {
+      run: ActionRun;
+      approval?: RunnerApproval;
+    };
     let run = data.run;
 
+    // Interactive approval path: onApprovalRequired callback provided
+    if (
+      run.status === "waiting_approval" &&
+      data.approval &&
+      runtimeOpts?.onApprovalRequired
+    ) {
+      const approvalTimeoutMs = runtimeOpts.approvalTimeoutMs ?? 5 * 60 * 1000;
+      const approvalDeadline = Date.now() + approvalTimeoutMs;
+
+      let decisionResult: ApprovalDecisionResult;
+      try {
+        const callbackPromise = Promise.resolve(
+          runtimeOpts.onApprovalRequired({ run, approval: data.approval }),
+        );
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new AgentWingError("Approval timed out.", "approval_timeout")), approvalTimeoutMs),
+        );
+        decisionResult = await Promise.race([callbackPromise, timeoutPromise]);
+      } catch (err) {
+        if (err instanceof AgentWingError && err.code === "approval_timeout") {
+          return { run, timedOut: true };
+        }
+        throw err;
+      }
+
+      void approvalDeadline;
+
+      const decision =
+        typeof decisionResult === "string" ? decisionResult : decisionResult.decision;
+      const reason =
+        typeof decisionResult === "object" ? decisionResult.reason : undefined;
+
+      const endpoint =
+        decision === "approve"
+          ? data.approval.approveEndpoint
+          : data.approval.rejectEndpoint;
+
+      run = await this.postRunnerDecision(endpoint, data.approval.runnerApprovalToken, reason);
+      return { run };
+    }
+
+    // Legacy polling path: waiting_approval but no onApprovalRequired
     if (run.status === "waiting_approval") {
-      run = await this.pollRun(run.runId, options.pollIntervalMs, options.maxWaitMs);
+      run = await this.pollRun(
+        run.runId,
+        options.pollIntervalMs,
+        options.maxWaitMs,
+      );
       if (run.status === "rejected") return { run };
     }
 

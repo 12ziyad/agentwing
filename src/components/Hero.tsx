@@ -37,7 +37,9 @@ export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Runtime infrastructure</p>
-            <h1 className="mt-4 text-5xl font-semibold leading-[1.08] tracking-tight text-white lg:text-6xl">
+            <h1 className="mt-4 flex items-center gap-4 text-5xl font-semibold leading-[1.08] tracking-tight text-white lg:text-6xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/agentwing-icon.png" alt="" className="size-14 rounded-xl lg:size-16" />
               AgentWing
             </h1>
             <p className="mt-4 text-xl font-medium text-slate-300">
