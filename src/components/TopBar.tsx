@@ -1,5 +1,5 @@
 import type { PlannerStatus } from "@/lib/types";
-import { FlaskConical, KeyRound, RotateCcw, ShieldCheck } from "lucide-react";
+import { FlaskConical, KeyRound, RotateCcw } from "lucide-react";
 
 type TopBarProps = {
   llmModel: string;
@@ -22,9 +22,8 @@ export function TopBar({ llmModel, plannerStatus, onReset, isRunning }: TopBarPr
     <header className="flex-none flex items-center gap-3 px-4 h-11 border-b border-white/[0.07] bg-[#070a16] z-20 overflow-hidden">
       {/* Logo */}
       <div className="flex items-center gap-2 shrink-0">
-        <div className="grid size-7 place-items-center rounded border border-indigo-400/30 bg-indigo-500/15 text-indigo-300">
-          <ShieldCheck size={14} />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/agentwing-icon.png" alt="" className="size-7 rounded" />
         <span className="text-sm font-semibold text-white">AgentWing</span>
         <span className="inline-flex items-center gap-1 rounded border border-cyan-400/25 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-cyan-300">
           <FlaskConical size={9} />

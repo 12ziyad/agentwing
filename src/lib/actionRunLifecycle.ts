@@ -558,7 +558,7 @@ export async function approveRunWithRunnerToken(runId: string, token: string, re
   const consumed = await consumeRunnerApprovalToken(runId, token);
   if (!consumed.ok) return consumed;
   const run = await approveRunAndContinue(runId, consumed.run.workspaceId, reason, consumed.source);
-  if (!run) return { ok: false as const, error: "Run not found.", status: 404 };
+  if (!run) return { ok: false as const, error: "Run not found.", status: 404, code: "run_not_found" };
   return { ok: true as const, run };
 }
 
@@ -566,7 +566,7 @@ export async function rejectRunWithRunnerToken(runId: string, token: string, rea
   const consumed = await consumeRunnerApprovalToken(runId, token);
   if (!consumed.ok) return consumed;
   const run = await rejectActionRun(runId, consumed.run.workspaceId, reason, consumed.source);
-  if (!run) return { ok: false as const, error: "Run not found.", status: 404 };
+  if (!run) return { ok: false as const, error: "Run not found.", status: 404, code: "run_not_found" };
   return { ok: true as const, run };
 }
 

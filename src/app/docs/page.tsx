@@ -73,6 +73,54 @@ const responseExample = `{
   "receiptId": "aw_receipt_..."
 }`;
 
+const runtimeApprovalSdkExample = `import { AgentWing } from "@agentwing/sdk";
+import * as readline from "node:readline/promises";
+
+const aw = new AgentWing({ apiKey: process.env.AGENTWING_API_KEY });
+
+const { run } = await aw.executeAction(
+  { actionType: "deploy_action", target: "production", description: "Deploy to prod" },
+  {
+    runtime: {
+      surface: "cli",
+      onApprovalRequired: async ({ approval }) => {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await rl.question(\`Approve deploy? (y/n) \`);
+        rl.close();
+        return answer.trim().toLowerCase() === "y" ? "approve" : "reject";
+      },
+    },
+  },
+);
+console.log("Final status:", run.status);`;
+
+const runtimeApprovalCurlApprove = `# 1. Execute action and capture the runner token from the response:
+curl -X POST https://agentwing.gpmai.dev/api/v1/execute-action \\
+  -H "Authorization: Bearer AW_LIVE_KEY_HERE" \\
+  -H "Content-Type: application/json" \\
+  -d '{"actionType":"deploy_action","target":"production","runtime":{"surface":"cli","interactiveApproval":true}}'
+# Response includes: approval.runnerApprovalToken and approval.approveEndpoint
+
+# 2. Approve using the runner token in the Authorization header:
+curl -X POST https://agentwing.gpmai.dev/api/v1/action-runs/RUN_ID/runner-approve \\
+  -H "Authorization: Bearer aw_rat_RUNNER_TOKEN_HERE" \\
+  -H "Content-Type: application/json" \\
+  -d '{}'
+
+# Or reject:
+curl -X POST https://agentwing.gpmai.dev/api/v1/action-runs/RUN_ID/runner-reject \\
+  -H "Authorization: Bearer aw_rat_RUNNER_TOKEN_HERE" \\
+  -H "Content-Type: application/json" \\
+  -d '{"reason":"Not safe to deploy right now."}'
+
+# Legacy body-param form also still works (back-compat):
+curl -X POST .../runner-approve \\
+  -H "Authorization: Bearer AW_LIVE_KEY_HERE" \\
+  -H "Content-Type: application/json" \\
+  -d '{"runnerApprovalToken":"aw_rat_..."}'
+
+# aw_live_ key ALONE (no runner token) → 400 missing_runner_approval_token`;
+
 const customPolicyExample = `// Create a policy via dashboard /dashboard/policies
 // or via API (authenticated dashboard session):
 POST /api/v1/policies
@@ -120,6 +168,42 @@ export default function DocsPage() {
             </div>
           ))}
         </div>
+
+        <DocSection title="0. Interactive runtime approval (SDK quickstart)">
+          <p className="mb-4 text-sm leading-6 text-slate-300">
+            Use <code className="font-mono text-cyan-100">executeAction</code> with{" "}
+            <code className="font-mono text-cyan-100">runtime.onApprovalRequired</code> to handle approval gates directly inside your runner.
+            The SDK calls your callback with the run and a{" "}
+            <code className="font-mono text-cyan-100">RunnerApproval</code> object, then automatically POSTs{" "}
+            the decision to the approve/reject endpoint using{" "}
+            <code className="font-mono text-cyan-100">Authorization: Bearer &lt;runnerApprovalToken&gt;</code>.
+          </p>
+          <CodeBlock label="TypeScript / Node.js SDK" code={runtimeApprovalSdkExample} />
+          <p className="mb-3 mt-2 text-sm leading-6 text-slate-300">
+            You can also call the approve/reject endpoints directly. The runner approval token{" "}
+            (<code className="font-mono text-cyan-100">aw_rat_…</code>) is accepted in the{" "}
+            <code className="font-mono text-cyan-100">Authorization</code> header <em>or</em> in{" "}
+            <code className="font-mono text-cyan-100">body.runnerApprovalToken</code>. An{" "}
+            <code className="font-mono text-cyan-100">aw_live_</code> key alone cannot approve — a runner token is always required.
+          </p>
+          <CodeBlock label="Low-level cURL" code={runtimeApprovalCurlApprove} />
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {[
+              ["missing_runner_approval_token (400)", "No runner token found in header or body."],
+              ["invalid_runner_token (401)", "Token not found or does not match this run."],
+              ["expired_runner_token (401)", "Token expired (default TTL 15 min)."],
+              ["runner_token_already_used (409)", "One-time token already consumed."],
+              ["run_not_waiting_approval (409)", "Run is not in waiting_approval state."],
+              ["blocked_action_cannot_be_approved (409)", "block decisions can never be approved."],
+              ["run_not_found (404)", "Run ID not found."],
+            ].map(([code, desc]) => (
+              <div key={code} className="rounded border border-white/[0.08] bg-[#05070d] p-3">
+                <p className="font-mono text-xs text-red-300">{code}</p>
+                <p className="mt-1 text-xs text-slate-400">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </DocSection>
 
         <DocSection title="1. Sign up free">
           <p className="text-sm leading-6 text-slate-300">

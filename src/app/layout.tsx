@@ -22,6 +22,11 @@ export const metadata: Metadata = {
     shortcut: "/agentwing-icon.png",
     apple: "/agentwing-icon.png",
   },
+  openGraph: {
+    title: "AgentWing - Guarded execution for AI agents",
+    description: "AgentWing checks and routes AI-agent execution before tools run: policy decisions, approvals, sandbox routing, restore points, logs, and audit receipts.",
+    images: [{ url: "/agentwing-icon.png", width: 256, height: 256 }],
+  },
 };
 
 export default function RootLayout({
