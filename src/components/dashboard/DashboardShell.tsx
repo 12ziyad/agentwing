@@ -52,6 +52,10 @@ export function DashboardShell({ children, auth }: { children: React.ReactNode; 
               <div className="mt-3 rounded border border-white/[0.08] bg-[#05070d] px-3 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Workspace</p>
                 <p className="mt-0.5 truncate text-xs font-medium text-slate-200">{workspace.name}</p>
+                {/* Shown because what you can do here depends on it, and a
+                    permission error is far less confusing when you already
+                    knew your role. */}
+                <p className="mt-1.5 font-mono text-[10px] text-slate-500">role: {auth.role}</p>
               </div>
             )}
           </div>

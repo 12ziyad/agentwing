@@ -1,6 +1,7 @@
 import { approveRunAndContinue } from "@/lib/actionRunLifecycle";
 import { getActionRunByApprovalId, rejectActionRun, resolveApproval, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
+import { assertNotSelfApproval, ForbiddenError, forbiddenResponse, requireCapability, SelfApprovalError } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,13 @@ export const runtime = "nodejs";
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
+
+  try {
+    requireCapability(auth, "run:approve");
+  } catch (error) {
+    if (error instanceof ForbiddenError) return forbiddenResponse(error);
+    throw error;
+  }
 
   const { id } = await params;
 
@@ -41,6 +49,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // Indexed lookup rather than scanning the newest hundred runs.
   const linkedRun = await getActionRunByApprovalId(auth.workspaceId, id);
+
+  // Separation of duties. Today runs record the agent that proposed them rather
+  // than the person who set that agent going, so this engages only where a
+  // human identity was recorded. It is wired here so it starts protecting the
+  // moment that identity exists, rather than being retrofitted later.
+  try {
+    assertNotSelfApproval(actor, linkedRun?.action?.agentId);
+  } catch (error) {
+    if (error instanceof SelfApprovalError) {
+      return Response.json({ error: error.message, code: error.code }, { status: error.status });
+    }
+    throw error;
+  }
 
   if (linkedRun) {
     const run =

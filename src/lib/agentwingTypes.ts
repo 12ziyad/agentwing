@@ -276,4 +276,12 @@ export type DashboardAuthContext = {
   user: AgentWingUser;
   workspace: AgentWingWorkspace;
   workspaceId: string;
+  /**
+   * The caller's role in this workspace, from `workspace_members.role`.
+   *
+   * Sourced from the membership table rather than the credential, so it is
+   * re-evaluated on every request and a role change takes effect immediately
+   * rather than when a token happens to expire.
+   */
+  role: import("./rbac").Role;
 };

@@ -1,12 +1,20 @@
 import { deleteCustomPolicy, updateCustomPolicy, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { parsePolicyInput, PolicyInputError } from "@/lib/policyInput";
+import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
+
+  try {
+    requireCapability(auth, "policy:write");
+  } catch (error) {
+    if (error instanceof ForbiddenError) return forbiddenResponse(error);
+    throw error;
+  }
 
   const { id } = await params;
   let body: unknown;
@@ -46,6 +54,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
+
+  try {
+    requireCapability(auth, "policy:write");
+  } catch (error) {
+    if (error instanceof ForbiddenError) return forbiddenResponse(error);
+    throw error;
+  }
 
   const { id } = await params;
   const deleted = await deleteCustomPolicy(id, auth.workspaceId);

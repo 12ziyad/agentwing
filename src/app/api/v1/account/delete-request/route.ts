@@ -5,6 +5,7 @@ import {
   trackEvent,
 } from "@/lib/agentwingStore";
 import { authRequiredResponse, clearCookie, getDashboardAuth, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,13 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
+
+  try {
+    requireCapability(auth, "workspace:delete");
+  } catch (error) {
+    if (error instanceof ForbiddenError) return forbiddenResponse(error);
+    throw error;
+  }
 
   const { userId } = auth.user;
   const { workspaceId } = auth;

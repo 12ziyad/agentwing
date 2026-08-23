@@ -1,6 +1,7 @@
 import { createCustomPolicy, listCustomPolicies, PolicyStoreUnavailableError, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { assertHasCriteria, parsePolicyInput, PolicyInputError } from "@/lib/policyInput";
+import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
+
+  try {
+    requireCapability(auth, "policy:write");
+  } catch (error) {
+    if (error instanceof ForbiddenError) return forbiddenResponse(error);
+    throw error;
+  }
 
   let body: unknown;
   try {

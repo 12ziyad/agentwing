@@ -1,6 +1,7 @@
 import { getAgentWingD1, type AgentWingD1Database } from "./cloudflareD1";
 import { criterionMatches } from "./policyPattern";
 import { redactValue } from "./redact";
+import { DEFAULT_ROLE, isRole } from "./rbac";
 import type {
   ActionReceipt,
   AgentAction,
@@ -998,7 +999,8 @@ export async function getUserSession(tokenHash: string): Promise<DashboardAuthCo
 
       const workspaceRow = await db
         .prepare(
-          `SELECT workspaces.workspace_id, workspaces.name, workspaces.owner_user_id, workspaces.created_at
+          `SELECT workspaces.workspace_id, workspaces.name, workspaces.owner_user_id, workspaces.created_at,
+                  workspace_members.role AS member_role
            FROM workspaces
            INNER JOIN workspace_members ON workspace_members.workspace_id = workspaces.workspace_id
            WHERE workspace_members.user_id = ?
@@ -1006,12 +1008,15 @@ export async function getUserSession(tokenHash: string): Promise<DashboardAuthCo
            LIMIT 1`,
         )
         .bind(userRow.user_id)
-        .first<WorkspaceRow>();
+        .first<WorkspaceRow & { member_role?: string | null }>();
       if (!workspaceRow) return undefined;
 
       const user = mapUserRow(userRow);
       const workspace = mapWorkspaceRow(workspaceRow);
-      return { mode: "user", user, workspace, workspaceId: workspace.workspaceId };
+      // An unrecognised role is treated as the least-privileged one. A typo in
+      // the column must not silently grant more than it names.
+      const role = isRole(workspaceRow.member_role) ? workspaceRow.member_role : DEFAULT_ROLE;
+      return { mode: "user", user, workspace, workspaceId: workspace.workspaceId, role };
     } catch (error) {
       warnD1Fallback("getUserSession", error);
     }
@@ -1024,7 +1029,8 @@ export async function getUserSession(tokenHash: string): Promise<DashboardAuthCo
   const workspaceId = state.userWorkspaceIds[session.userId];
   const workspace = workspaceId ? state.workspacesById[workspaceId] : undefined;
   if (!user || !workspace) return undefined;
-  return { mode: "user", user, workspace, workspaceId };
+  // The in-memory path only ever creates a workspace for its owner.
+  return { mode: "user", user, workspace, workspaceId, role: "owner" };
 }
 
 export async function deleteUserSession(tokenHash: string) {

@@ -1,5 +1,6 @@
 import { createProject, listProjects, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
+import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
+
+  try {
+    requireCapability(auth, "project:write");
+  } catch (error) {
+    if (error instanceof ForbiddenError) return forbiddenResponse(error);
+    throw error;
+  }
 
   let body: unknown;
 

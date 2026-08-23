@@ -1,5 +1,6 @@
 import { revokeApiKey, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
+import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 
@@ -9,6 +10,13 @@ export async function DELETE(
 ) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
+
+  try {
+    requireCapability(auth, "key:write");
+  } catch (error) {
+    if (error instanceof ForbiddenError) return forbiddenResponse(error);
+    throw error;
+  }
 
   const { id } = await params;
   if (!id) return Response.json({ error: "API key ID is required." }, { status: 400 });
