@@ -1,114 +1,155 @@
 # @agentwing/sdk
 
-TypeScript/Node.js SDK for [AgentWing](https://agentwing.gpmai.dev) — runtime control layer for AI agents.
-
-## Quickstart — interactive runtime approval
-
-```ts
-import { AgentWing } from "@agentwing/sdk";
-import * as readline from "node:readline/promises";
-
-const aw = new AgentWing({ apiKey: process.env.AGENTWING_API_KEY });
-
-const { run } = await aw.executeAction(
-  { actionType: "deploy_action", target: "production", description: "Deploy to prod" },
-  {
-    runtime: {
-      surface: "cli",
-      onApprovalRequired: async ({ run, approval }) => {
-        console.log("Approval required:", approval.approvalUrl);
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-        const answer = await rl.question("Approve deploy? (y/n) ");
-        rl.close();
-        return answer.trim().toLowerCase() === "y"
-          ? "approve"
-          : { decision: "reject", reason: "Operator declined." };
-      },
-    },
-  },
-);
-console.log("Final status:", run.status);
-```
-
-The SDK calls `onApprovalRequired` when the server returns `waiting_approval` with a runner token.  
-It then POSTs the decision to `approval.approveEndpoint` or `approval.rejectEndpoint` with  
-`Authorization: Bearer <runnerApprovalToken>`.
-
-## Low-level runner-approve / runner-reject endpoints
+Runtime control layer for AI agents. Ask before your agent acts; obey the answer.
 
 ```bash
-# Approve using the runner token directly in the Authorization header:
-curl -X POST https://agentwing.gpmai.dev/api/v1/action-runs/RUN_ID/runner-approve \
-  -H "Authorization: Bearer aw_rat_RUNNER_TOKEN_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# Reject:
-curl -X POST https://agentwing.gpmai.dev/api/v1/action-runs/RUN_ID/runner-reject \
-  -H "Authorization: Bearer aw_rat_RUNNER_TOKEN_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{"reason":"Not safe right now."}'
-
-# Legacy: body.runnerApprovalToken is also accepted (back-compat):
-curl -X POST .../runner-approve \
-  -H "Authorization: Bearer aw_live_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"runnerApprovalToken":"aw_rat_..."}'
-
-# aw_live_ key alone (no runner token) → 400 missing_runner_approval_token
+npm install @agentwing/sdk
 ```
 
-Token precedence in the routes:
-1. `Authorization: Bearer <token>` — treated as runner token when it does NOT start with `aw_live_`
-2. `body.runnerApprovalToken`
-3. `body.token`
+Node 18+. Ships ESM and CJS with types.
 
-## Error codes
-
-| code | status | meaning |
-|---|---|---|
-| `missing_runner_approval_token` | 400 | No runner token in header or body |
-| `invalid_runner_token` | 401 | Token not found / wrong run |
-| `expired_runner_token` | 401 | Token TTL elapsed (default 15 min) |
-| `runner_token_already_used` | 409 | One-time token already consumed |
-| `run_not_waiting_approval` | 409 | Run not in `waiting_approval` |
-| `blocked_action_cannot_be_approved` | 409 | `block` decisions cannot be approved |
-| `run_not_found` | 404 | Run ID not found |
-
-The SDK surfaces these as `AgentWingError` with a `.code` property:
+## The short version
 
 ```ts
-import { AgentWingError } from "@agentwing/sdk";
+import { AgentWing, AgentWingGuardError } from "@agentwing/sdk";
+
+const aw = new AgentWing({ apiKey: process.env.AGENTWING_API_KEY! });
 
 try {
-  const { run } = await aw.executeAction(action, { runtime: { surface: "cli", onApprovalRequired } });
-} catch (err) {
-  if (err instanceof AgentWingError) {
-    console.error(err.code, err.message); // e.g. "runner_token_already_used"
+  const output = await aw.guardAction({
+    action: {
+      actionType: "shell_command",
+      tool: "terminal",
+      command: "rm -rf ./build",
+      description: "Clean the build directory.",
+    },
+    execute: () => runInMyShell("rm -rf ./build"),
+  });
+} catch (error) {
+  if (error instanceof AgentWingGuardError) {
+    // AgentWing did not allow it. Tell the model why and let it re-plan.
+    console.error(error.result.decision, error.result.feedback);
   }
 }
 ```
 
-## API
+`guardAction` throws when the decision is anything but `allow`, so a blocked
+action cannot be missed by forgetting to check a return value.
 
-### `new AgentWing(options)`
+## Decisions
 
-| option | type | description |
-|---|---|---|
-| `apiKey` | `string` | `aw_live_…` key |
-| `baseUrl` | `string` | Default: `https://agentwing.gpmai.dev` |
-| `fetch` | `typeof fetch` | Custom fetch implementation |
+Every action gets exactly one:
 
-### `executeAction(action, options?)`
+| Decision | Meaning |
+|---|---|
+| `allow` | Proceed. |
+| `block` | Never run this. |
+| `approval_required` | A human decides. |
+| `sandbox_required` | Run it in a sandbox, not on the host. |
+| `restore_point_required` | Make it reversible first. |
 
-| option | type | description |
-|---|---|---|
-| `runtime.surface` | `"cli" \| "ide" \| "web" \| "webhook"` | Tells server which surface is calling |
-| `runtime.onApprovalRequired` | callback | Called with `{ run, approval }` — return `"approve"` / `"reject"` |
-| `runtime.approvalTimeoutMs` | `number` | Default 5 min; returns `{ run, timedOut: true }` if exceeded |
-| `runtime.runnerId` | `string` | Optional runner identifier |
-| `pollIntervalMs` | `number` | Polling interval for legacy wait-for-dashboard flow |
-| `maxWaitMs` | `number` | Max wait for polling |
-| `createRestorePoint` | callback | Called before restore-point actions |
-| `localRunner` | callback | Execute action locally and report result |
-| `serializeLocalResult` | callback | Serialize local runner output |
+## Just the decision
+
+```ts
+const { decision, policy, feedback, receiptId } = await aw.checkAction({
+  actionType: "file_access",
+  tool: "filesystem",
+  target: ".env",
+  description: "Read environment secrets.",
+});
+// decision: "block"  policy: "block-secret-file-access"
+```
+
+`checkAction` never creates a run. Use it when you want the verdict and will
+enforce it yourself.
+
+## The full lifecycle
+
+`executeAction` creates a run and drives it: approval gates, sandbox routing,
+restore points, and reporting the result back.
+
+```ts
+const { run, handoff, timedOut } = await aw.executeAction(
+  { actionType: "deploy_action", target: "production", description: "Ship it." },
+  {
+    onApprovalRequired: ({ handoff }) => {
+      console.log("Approve at:", handoff?.approvalUrl);
+    },
+    maxWaitMs: 5 * 60 * 1000,
+  },
+);
+```
+
+### The SDK cannot approve on your behalf
+
+When a run is held, you get a **handoff** — an `approvalUrl` for a human and a
+`statusUrl` to poll. It contains no credential, because the server does not
+issue one to the principal whose action is being gated.
+
+An earlier version returned a single-use approval token in the `executeAction`
+response, to the agent that made the request. Two calls approved your own
+deploy, and the trail recorded it as human approval. If the party being policed
+can approve itself, the gate is decoration.
+
+## Running the action locally
+
+For decisions that hand execution back to you:
+
+```ts
+await aw.executeAction(action, {
+  createRestorePoint: async (run) => { await snapshot(); },
+  localRunner: async (run) => execSync(run.action.command!).toString(),
+  serializeLocalResult: (stdout) => ({ stdout, exitCode: 0 }),
+});
+```
+
+## Reliability
+
+Every request has a timeout, bounded retries with full jitter, and honours
+`Retry-After`. Retries apply to 408/425/429/5xx and network failures — never to
+a 4xx that will not become valid on a second attempt.
+
+```ts
+const aw = new AgentWing({
+  apiKey,
+  timeoutMs: 15_000,   // per attempt
+  maxRetries: 3,       // total attempts
+});
+
+// Per call, plus cancellation:
+await aw.checkAction(action, { signal: controller.signal, timeoutMs: 2_000 });
+```
+
+Pass an `idempotencyKey` on a write so a retry replays the first response
+instead of creating a second run.
+
+## Errors
+
+`AgentWingError` carries a stable `code`, the HTTP `status`, the server's
+`requestId`, and `retryable`.
+
+| code | meaning |
+|---|---|
+| `unauthorized` | Missing or invalid API key. |
+| `rate_limited` | Too many requests. Honour `retryAfterSeconds`. |
+| `plan_limit_reached` | The key has used its plan allowance. |
+| `policy_store_unavailable` | Policies could not be read, so nothing was decided. Retry. |
+| `blocked_action_cannot_execute` | A blocked run cannot report an execution result. |
+| `run_not_awaiting_execution` | The run is not in a state where executing was authorised. |
+| `timeout` / `network_error` / `cancelled` | Client-side. |
+
+## Options
+
+```ts
+new AgentWing({
+  apiKey,                                  // required
+  baseUrl: "https://agentwing.gpmai.dev",  // self-hosting? point it here
+  timeoutMs: 15_000,
+  maxRetries: 3,
+  fetch: myFetch,                          // custom fetch
+});
+```
+
+## Licence
+
+Apache-2.0

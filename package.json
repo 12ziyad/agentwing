@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "check:dead-code": "node scripts/check-dead-code.mjs"
+    "check:dead-code": "node scripts/check-dead-code.mjs",
+    "build:sdk": "npm run build --workspace @agentwing/sdk"
   },
   "dependencies": {
     "@e2b/code-interpreter": "^2.4.2",
@@ -35,5 +36,8 @@
     "typescript": "^5",
     "vitest": "^4.1.11",
     "wrangler": "^4.92.0"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }
