@@ -2,6 +2,7 @@ import { getAgentWingD1, type AgentWingD1Database } from "./cloudflareD1";
 import { criterionMatches } from "./policyPattern";
 import { redactValue } from "./redact";
 import { DEFAULT_ROLE, isRole } from "./rbac";
+import { appendReceiptToChain } from "./receiptChainStore";
 import type {
   ActionReceipt,
   AgentAction,
@@ -1543,6 +1544,21 @@ export async function createReceipt(
           )
           .bind(apiKeyId)
           .run();
+      }
+
+      // Chain the receipt so it cannot later be edited unnoticed.
+      //
+      // Best-effort on purpose: the receipt itself is already durably written,
+      // and losing the decision record because the chain append failed would
+      // be a strictly worse outcome than an unchained entry. A gap is visible
+      // to the verifier, which is the honest failure mode — silently dropping
+      // the receipt would not be.
+      if (workspaceId) {
+        try {
+          await appendReceiptToChain(db, workspaceId, receipt);
+        } catch (error) {
+          warnD1Fallback("appendReceiptToChain", error);
+        }
       }
 
       return receipt;
