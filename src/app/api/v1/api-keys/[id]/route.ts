@@ -23,7 +23,7 @@ export async function DELETE(
 
   await trackEvent("api_key_revoked", {
     workspaceId: auth.workspaceId,
-    userId: auth.mode === "user" ? auth.user.userId : undefined,
+    userId: auth.user.userId,
     metadata: { apiKeyId: id },
   });
 

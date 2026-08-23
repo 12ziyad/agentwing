@@ -13,7 +13,6 @@ function reasonFromBody(body: unknown) {
 export async function POST(request: Request, { params }: { params: Promise<{ runId: string }> }) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
-  if (!auth.workspaceId) return Response.json({ error: "Workspace required." }, { status: 403 });
 
   let body: unknown;
   try {
@@ -23,12 +22,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ run
   }
 
   const { runId } = await params;
-  const run = await approveRunAndContinue(runId, auth.workspaceId, reasonFromBody(body));
+  const run = await approveRunAndContinue(runId, auth.workspaceId, auth.user.email, reasonFromBody(body));
   if (!run) return Response.json({ error: "Run not found or not awaiting approval." }, { status: 404 });
 
   await trackEvent("action_run_approved", {
     workspaceId: auth.workspaceId,
-    userId: auth.mode === "user" ? auth.user.userId : undefined,
+    userId: auth.user.userId,
     projectId: run.projectId,
     metadata: { runId, status: run.status },
   });

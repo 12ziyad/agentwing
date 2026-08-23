@@ -33,8 +33,8 @@ const navItems = [
 
 export function DashboardShell({ children, auth }: { children: React.ReactNode; auth: DashboardAuthContext }) {
   const pathname = usePathname();
-  const user = auth.mode === "user" ? auth.user : undefined;
-  const workspace = auth.mode === "user" ? auth.workspace : undefined;
+  const user = auth.user;
+  const workspace = auth.workspace;
   const maskedUser = user?.email ? "Signed in" : "Admin";
 
   return (

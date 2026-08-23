@@ -537,10 +537,11 @@ export async function continueExecutionForRun(run: ActionRun, auth: RunAuthConte
 export async function approveRunAndContinue(
   runId: string,
   workspaceId: string,
+  approvedBy: string,
   reason?: string,
   source = "dashboard",
 ): Promise<ActionRun | undefined> {
-  const approvedRun = await continueActionRunAfterApproval(runId, workspaceId, reason, source);
+  const approvedRun = await continueActionRunAfterApproval(runId, workspaceId, approvedBy, reason, source);
   if (!approvedRun) return undefined;
 
   return continueExecutionForRun(approvedRun, {

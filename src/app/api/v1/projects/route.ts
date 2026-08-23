@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const project = await createProject(name, auth.workspaceId);
     await trackEvent("project_created", {
       workspaceId: auth.workspaceId,
-      userId: auth.mode === "user" ? auth.user.userId : undefined,
+      userId: auth.user.userId,
       projectId: project.projectId,
       metadata: { name: project.name },
     });

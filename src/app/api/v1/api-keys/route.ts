@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const result = await generateApiKey(projectId, auth.workspaceId);
     await trackEvent("api_key_created", {
       workspaceId: auth.workspaceId,
-      userId: auth.mode === "user" ? auth.user.userId : undefined,
+      userId: auth.user.userId,
       projectId,
       metadata: { apiKeyId: result.record.apiKeyId, keyPrefix: result.record.keyPrefix },
     });

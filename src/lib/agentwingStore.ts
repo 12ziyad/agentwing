@@ -1835,6 +1835,41 @@ export async function updateActionRun(
   return getActionRun(runId, workspaceId);
 }
 
+/**
+ * The run gated by a given approval.
+ *
+ * A direct indexed lookup. The approvals route used to fetch the 100 newest
+ * runs and scan them in JavaScript, so resolving an approval older than the
+ * hundredth most recent run silently did nothing to the run itself --
+ * `idx_action_runs_approval_id` has existed the whole time.
+ */
+export async function getActionRunByApprovalId(workspaceId: string, approvalId: string): Promise<ActionRun | undefined> {
+  requireWorkspace(workspaceId, "getActionRunByApprovalId");
+  const db = await getDb();
+
+  if (db) {
+    try {
+      const row = await db
+        .prepare(
+          `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+                  action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+                  sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+                  error_message, duration_ms, created_at, updated_at, completed_at, approval_source
+           FROM action_runs
+           WHERE approval_id = ? AND workspace_id = ?
+           LIMIT 1`,
+        )
+        .bind(approvalId, workspaceId)
+        .first<ActionRunRow>();
+      if (row) return mapActionRunRow(row);
+    } catch (error) {
+      warnD1Fallback("getActionRunByApprovalId", error);
+    }
+  }
+
+  return getState().actionRuns.find((run) => run.approvalId === approvalId && run.workspaceId === workspaceId);
+}
+
 export async function listActionRuns(
   workspaceId: string,
   projectId?: string,
@@ -2104,6 +2139,7 @@ export async function consumeRunnerApprovalToken(
 export async function continueActionRunAfterApproval(
   runId: string,
   workspaceId: string,
+  resolvedBy: string,
   resolvedReason?: string,
   approvalSource = "dashboard",
 ): Promise<ActionRun | undefined> {
@@ -2111,10 +2147,10 @@ export async function continueActionRunAfterApproval(
   if (!run || run.status !== "waiting_approval") return run;
 
   if (run.approvalId) {
-    await resolveApproval(run.approvalId, workspaceId, "approved", resolvedReason);
+    await resolveApproval(run.approvalId, workspaceId, "approved", resolvedBy, resolvedReason);
   }
 
-  await appendExecutionEvent(runId, "approval_approved", "Human approval was recorded.", { source: approvalSource });
+  await appendExecutionEvent(runId, "approval_approved", `Approved by ${resolvedBy}.`, { source: approvalSource, resolvedBy });
   return updateActionRun(
     runId,
     {
@@ -2129,6 +2165,7 @@ export async function continueActionRunAfterApproval(
 export async function rejectActionRun(
   runId: string,
   workspaceId: string,
+  resolvedBy: string,
   resolvedReason?: string,
   approvalSource = "dashboard",
 ): Promise<ActionRun | undefined> {
@@ -2136,10 +2173,10 @@ export async function rejectActionRun(
   if (!run) return undefined;
 
   if (run.approvalId && run.status === "waiting_approval") {
-    await resolveApproval(run.approvalId, workspaceId, "rejected", resolvedReason);
+    await resolveApproval(run.approvalId, workspaceId, "rejected", resolvedBy, resolvedReason);
   }
 
-  await appendExecutionEvent(runId, "approval_rejected", "Human rejected this action.", { source: approvalSource });
+  await appendExecutionEvent(runId, "approval_rejected", `Rejected by ${resolvedBy}.`, { source: approvalSource, resolvedBy });
   return updateActionRun(
     runId,
     {
@@ -3059,17 +3096,44 @@ export async function listApprovals(workspaceId: string, status?: string): Promi
   }
 }
 
-export async function resolveApproval(approvalId: string, workspaceId: string, status: "approved" | "rejected", resolvedReason?: string): Promise<boolean> {
+/**
+ * Record a human's decision on a held action.
+ *
+ * `resolvedBy` is required. The column existed and was read by the dashboard
+ * but never written, so an audit could show that an action was approved and
+ * when, but not by whom -- which is the one question an approval record exists
+ * to answer.
+ *
+ * The `status = 'pending'` predicate makes this a compare-and-swap, so two
+ * concurrent approvals cannot both succeed. The result is read from
+ * `meta.changes` rather than `success`, which is true for any statement that
+ * executed -- including one that matched nothing. That made the caller's
+ * not-found guard dead code and emitted audit events for decisions that never
+ * landed.
+ */
+export async function resolveApproval(
+  approvalId: string,
+  workspaceId: string,
+  status: "approved" | "rejected",
+  resolvedBy: string,
+  resolvedReason?: string,
+): Promise<boolean> {
+  requireWorkspace(workspaceId, "resolveApproval");
   const db = await getDb();
   if (!db) return false;
   const now = nowIso();
   try {
     const result = await db
-      .prepare("UPDATE approvals SET status = ?, resolved_at = ?, updated_at = ?, resolved_reason = ? WHERE approval_id = ? AND workspace_id = ? AND status = 'pending'")
-      .bind(status, now, now, resolvedReason ?? null, approvalId, workspaceId)
+      .prepare(
+        `UPDATE approvals
+         SET status = ?, resolved_at = ?, updated_at = ?, resolved_by = ?, resolved_reason = ?
+         WHERE approval_id = ? AND workspace_id = ? AND status = 'pending'`,
+      )
+      .bind(status, now, now, resolvedBy, resolvedReason ?? null, approvalId, workspaceId)
       .run();
-    return Boolean(result.success);
-  } catch {
+    return (result.meta?.changes ?? 0) > 0;
+  } catch (error) {
+    warnD1Fallback("resolveApproval", error);
     return false;
   }
 }
