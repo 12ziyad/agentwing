@@ -1,7 +1,6 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
+import { requireDashboardSession } from "@/lib/dashboardSession";
 import { getReceipt } from "@/lib/agentwingStore";
 
 export const dynamic = "force-dynamic";
@@ -28,13 +27,8 @@ function maskedProjectId(projectId?: string) {
 
 export default async function ReceiptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${encodeURIComponent(c.value)}`)
-    .join("; ");
-  const auth = await getDashboardAuthFromCookieHeader(cookieHeader);
-  const receipt = await getReceipt(id, auth?.workspaceId);
+  const { workspaceId } = await requireDashboardSession();
+  const receipt = await getReceipt(id, workspaceId);
 
   if (!receipt) notFound();
 

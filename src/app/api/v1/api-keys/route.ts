@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const projectId = searchParams.get("projectId") ?? undefined;
 
   return Response.json({
-    apiKeys: await listApiKeys(projectId, auth.workspaceId),
+    apiKeys: await listApiKeys(auth.workspaceId, projectId),
   });
 }
 

@@ -1,7 +1,6 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { DangerZoneControls, CopyButton } from "./SettingsClientControls";
-import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
+import { requireDashboardSession } from "@/lib/dashboardSession";
 import { getSandboxConfigForWorkspace, listApiKeys } from "@/lib/agentwingStore";
 import type { AgentWingApiKeyRecord, SandboxProviderConfig } from "@/lib/agentwingTypes";
 
@@ -28,27 +27,11 @@ async function safeLoad<T>(loader: () => Promise<T>, fallback: T): Promise<T> {
 }
 
 export default async function SettingsPage() {
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${encodeURIComponent(c.value)}`)
-    .join("; ");
-
-  const auth = await safeLoad(
-    () => getDashboardAuthFromCookieHeader(cookieHeader),
-    undefined,
-  );
-
-  const user = auth?.mode === "user" ? auth.user : undefined;
-  const workspace = auth?.mode === "user" ? auth.workspace : undefined;
+  const { user, workspace, workspaceId } = await requireDashboardSession();
 
   const [allKeys, sandboxConfig] = await Promise.all([
-    workspace
-      ? safeLoad<AgentWingApiKeyRecord[]>(() => listApiKeys(undefined, workspace.workspaceId), [])
-      : Promise.resolve([]),
-    workspace
-      ? safeLoad<SandboxProviderConfig | null>(() => getSandboxConfigForWorkspace(workspace.workspaceId), null)
-      : Promise.resolve(null),
+    safeLoad<AgentWingApiKeyRecord[]>(() => listApiKeys(workspaceId), []),
+    safeLoad<SandboxProviderConfig | null>(() => getSandboxConfigForWorkspace(workspaceId), null),
   ]);
 
   const activeKeys = allKeys.filter((key) => !key.revokedAt);

@@ -1,9 +1,8 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckCircle2, Circle, Clock, Terminal, XCircle } from "lucide-react";
 import { RunApprovalControls } from "@/components/dashboard/RunApprovalControls";
-import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
+import { requireDashboardSession } from "@/lib/dashboardSession";
 import { getActionRun, listExecutionEvents } from "@/lib/agentwingStore";
 import type { ActionRun, ExecutionEvent } from "@/lib/agentwingTypes";
 
@@ -45,11 +44,8 @@ const riskClass: Record<string, string> = {
 
 export default async function RunDetailPage({ params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params;
-  const cookieStore = await cookies();
-  const auth = await getDashboardAuthFromCookieHeader(
-    cookieStore.getAll().map((cookie) => `${cookie.name}=${encodeURIComponent(cookie.value)}`).join("; "),
-  );
-  const run = await getActionRun(runId, auth?.workspaceId);
+  const { workspaceId } = await requireDashboardSession();
+  const run = await getActionRun(runId, workspaceId);
   if (!run) notFound();
 
   const events = await listExecutionEvents(run.runId);

@@ -56,9 +56,17 @@ type RunnerApprovalTokenRecord = {
   createdAt: string;
 };
 
+/**
+ * A caller authenticated by API key.
+ *
+ * `workspaceId` is non-optional. A key that resolves to no workspace used to be
+ * treated as unscoped, which meant every query it reached ran across all
+ * tenants. There is no legitimate "authenticated but unscoped" caller, so a key
+ * with no workspace is now rejected at authentication instead.
+ */
 type AuthenticatedApiKey = {
   apiKeyId: string;
-  workspaceId?: string;
+  workspaceId: string;
   projectId?: string;
   keyPrefix: string;
   isDemo: boolean;
@@ -240,6 +248,24 @@ export const DEMO_API_KEY = "aw_live_demo_key";
 const BETA_ACTION_CHECK_LIMIT = 1000;
 const BETA_SANDBOX_RUN_LIMIT = 20;
 const DEMO_PROJECT_ID = "proj_demo_runtime_lab";
+const DEMO_WORKSPACE_ID = "workspace_demo";
+
+/**
+ * Every read and write of tenant data must be scoped to exactly one workspace.
+ *
+ * The type signatures make an unscoped call a compile error. This is the
+ * runtime backstop for the paths types cannot reach — a value crossing the
+ * `JSON.parse` boundary, a `any` cast, or JavaScript calling in. It throws
+ * rather than returning empty, because a query that silently loses its scope
+ * predicate returns every tenant's rows, and failing loudly is the only safe
+ * behaviour for that class of mistake.
+ */
+function requireWorkspace(workspaceId: string | undefined, operation: string): asserts workspaceId is string {
+  if (typeof workspaceId === "string" && workspaceId.length > 0) return;
+  throw new Error(
+    `${operation} was called without a workspace id. Tenant data can only be accessed within a workspace scope.`,
+  );
+}
 
 /**
  * The demo key is a publicly-known string that authenticates with no workspace,
@@ -981,6 +1007,11 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
   const rawApiKey = getApiKeyFromRequest(request);
   if (!rawApiKey) return undefined;
 
+  // Refuse the publicly-known demo key before touching the database. It is a
+  // local development affordance, and a deployed instance must reject it
+  // whether or not storage happens to be reachable.
+  if (rawApiKey === DEMO_API_KEY && !demoKeyEnabled()) return undefined;
+
   const db = await getDb();
   if (db) {
     try {
@@ -992,6 +1023,8 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
         if (!demoKeyEnabled()) return undefined;
         return {
           apiKeyId: DEMO_API_KEY,
+          workspaceId: DEMO_WORKSPACE_ID,
+          projectId: DEMO_PROJECT_ID,
           keyPrefix: DEMO_API_KEY,
           isDemo: true,
         };
@@ -1010,6 +1043,11 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
 
       if (!row) return undefined;
 
+      // A key must belong to exactly one workspace. Historically a NULL here
+      // produced an unscoped caller that could read every tenant's data, so it
+      // is now an authentication failure rather than a wildcard.
+      if (!row.workspace_id) return undefined;
+
       const apiKeyId = row.api_key_id ?? row.api_key;
       await db
         .prepare("UPDATE api_keys SET last_used_at = ? WHERE api_key = ?")
@@ -1018,7 +1056,7 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
 
       return {
         apiKeyId,
-        workspaceId: row.workspace_id ?? undefined,
+        workspaceId: row.workspace_id,
         projectId: row.project_id ?? undefined,
         keyPrefix: row.key_prefix ?? keyPrefix(rawApiKey),
         isDemo: false,
@@ -1036,10 +1074,12 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
   if (!apiKeyId) return undefined;
   const record = state.apiKeysById[apiKeyId];
   record.lastUsedAt = nowIso();
+  const workspaceId = record.workspaceId ?? (rawApiKey === DEMO_API_KEY ? DEMO_WORKSPACE_ID : undefined);
+  if (!workspaceId) return undefined;
 
   return {
     apiKeyId,
-    workspaceId: record.workspaceId,
+    workspaceId,
     projectId: record.projectId,
     keyPrefix: record.keyPrefix,
     isDemo: rawApiKey === DEMO_API_KEY,
@@ -1085,25 +1125,26 @@ async function ensureD1UsageForKey(db: AgentWingD1Database, apiKeyId: string, re
     .run();
 }
 
-export async function listProjects(workspaceId?: string): Promise<AgentWingProject[]> {
+export async function listProjects(workspaceId: string): Promise<AgentWingProject[]> {
+  requireWorkspace(workspaceId, "listProjects");
   const db = await getDb();
   if (db) {
     try {
       await ensureD1DemoKey(db);
-      const statement = workspaceId
-        ? db
-            .prepare("SELECT project_id, workspace_id, name, created_at FROM projects WHERE workspace_id = ? ORDER BY created_at DESC")
-            .bind(workspaceId)
-        : db.prepare("SELECT project_id, workspace_id, name, created_at FROM projects ORDER BY created_at DESC");
-      const result = await statement.all<ProjectRow>();
+      const result = await db
+        .prepare(
+          "SELECT project_id, workspace_id, name, created_at FROM projects WHERE workspace_id = ? ORDER BY created_at DESC",
+        )
+        .bind(workspaceId)
+        .all<ProjectRow>();
       return (result.results ?? []).map(mapProjectRow);
     } catch (error) {
-      warnD1Fallback("createProject", error);
+      warnD1Fallback("listProjects", error);
       // Fall back to memory if D1 has not been migrated yet.
     }
   }
 
-  return getState().projects.filter((project) => !workspaceId || project.workspaceId === workspaceId);
+  return getState().projects.filter((project) => project.workspaceId === workspaceId);
 }
 
 export async function createProject(name: string, workspaceId?: string): Promise<AgentWingProject> {
@@ -1137,20 +1178,17 @@ export async function createProject(name: string, workspaceId?: string): Promise
   return project;
 }
 
-export async function listApiKeys(projectId?: string, workspaceId?: string): Promise<AgentWingApiKeyRecord[]> {
+export async function listApiKeys(workspaceId: string, projectId?: string): Promise<AgentWingApiKeyRecord[]> {
+  requireWorkspace(workspaceId, "listApiKeys");
   const db = await getDb();
   if (db) {
     try {
       await ensureD1DemoKey(db);
-      const conditions = ["project_id IS NOT NULL"];
-      const values: string[] = [];
+      const conditions = ["project_id IS NOT NULL", "workspace_id = ?"];
+      const values: string[] = [workspaceId];
       if (projectId) {
         conditions.push("project_id = ?");
         values.push(projectId);
-      }
-      if (workspaceId) {
-        conditions.push("workspace_id = ?");
-        values.push(workspaceId);
       }
       const statement = db
         .prepare(
@@ -1172,7 +1210,7 @@ export async function listApiKeys(projectId?: string, workspaceId?: string): Pro
   return Object.values(getState().apiKeysById)
     .filter((record) => record.apiKeyId !== DEMO_API_KEY)
     .filter((record) => !projectId || record.projectId === projectId)
-    .filter((record) => !workspaceId || record.workspaceId === workspaceId)
+    .filter((record) => record.workspaceId === workspaceId)
     .map((record) => ({
       apiKeyId: record.apiKeyId,
       workspaceId: record.workspaceId,
@@ -1186,7 +1224,8 @@ export async function listApiKeys(projectId?: string, workspaceId?: string): Pro
     }));
 }
 
-export async function generateApiKey(projectId: string, workspaceId?: string) {
+export async function generateApiKey(projectId: string, workspaceId: string) {
+  requireWorkspace(workspaceId, "generateApiKey");
   const project = (await listProjects(workspaceId)).find((item) => item.projectId === projectId);
   if (!project) {
     throw new Error("Project not found.");
@@ -1274,36 +1313,25 @@ export async function getUsageForApiKey(apiKeyId: string) {
   return publicUsage(ensureUsageForKeyFallback(apiKeyId));
 }
 
-export async function getUsageForWorkspace(workspaceId?: string) {
+export async function getUsageForWorkspace(workspaceId: string) {
+  requireWorkspace(workspaceId, "getUsageForWorkspace");
   const db = await getDb();
   if (db) {
     try {
       await ensureD1DemoKey(db);
-      const statement = workspaceId
-        ? db
-            .prepare(
-              `SELECT
-                 COALESCE(SUM(usage.action_checks_used), 0) AS action_checks_used,
-                 COALESCE(SUM(usage.action_check_limit), 0) AS action_check_limit,
-                 COALESCE(SUM(usage.sandbox_runs_used), 0) AS sandbox_runs_used,
-                 COALESCE(SUM(usage.sandbox_run_limit), 0) AS sandbox_run_limit,
-                 COALESCE(SUM(usage.receipts_created), 0) AS receipts_created
-               FROM usage
-               INNER JOIN api_keys ON api_keys.api_key = usage.api_key
-               WHERE api_keys.workspace_id = ?`,
-            )
-            .bind(workspaceId)
-        : db.prepare(
-            `SELECT
-               COALESCE(SUM(usage.action_checks_used), 0) AS action_checks_used,
-               COALESCE(SUM(usage.action_check_limit), 0) AS action_check_limit,
-               COALESCE(SUM(usage.sandbox_runs_used), 0) AS sandbox_runs_used,
-               COALESCE(SUM(usage.sandbox_run_limit), 0) AS sandbox_run_limit,
-               COALESCE(SUM(usage.receipts_created), 0) AS receipts_created
-             FROM usage
-             INNER JOIN api_keys ON api_keys.api_key = usage.api_key
-             WHERE api_keys.project_id IS NOT NULL`,
-          );
+      const statement = db
+        .prepare(
+          `SELECT
+             COALESCE(SUM(usage.action_checks_used), 0) AS action_checks_used,
+             COALESCE(SUM(usage.action_check_limit), 0) AS action_check_limit,
+             COALESCE(SUM(usage.sandbox_runs_used), 0) AS sandbox_runs_used,
+             COALESCE(SUM(usage.sandbox_run_limit), 0) AS sandbox_run_limit,
+             COALESCE(SUM(usage.receipts_created), 0) AS receipts_created
+           FROM usage
+           INNER JOIN api_keys ON api_keys.api_key = usage.api_key
+           WHERE api_keys.workspace_id = ?`,
+        )
+        .bind(workspaceId);
       const row = await statement.first<UsageRow>();
       return publicUsage({
         apiKey: workspaceId ? "workspace" : "all-workspaces",
@@ -1484,33 +1512,26 @@ export async function createReceipt(
   return receipt;
 }
 
-export async function listReceipts(workspaceId?: string) {
+export async function listReceipts(workspaceId: string) {
+  requireWorkspace(workspaceId, "listReceipts");
   const db = await getDb();
   if (db) {
     try {
-      const statement = workspaceId
-        ? db
-            .prepare(
-              `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
+      const result = await db
+        .prepare(
+          `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
                   decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
-               FROM receipts
-               WHERE workspace_id = ?
-               ORDER BY created_at DESC
-               LIMIT 500`,
-            )
-            .bind(workspaceId)
-        : db.prepare(
-            `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
-                  decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
-             FROM receipts
-             ORDER BY created_at DESC
-             LIMIT 500`,
-          );
-      const result = await statement.all<ReceiptRow>();
+           FROM receipts
+           WHERE workspace_id = ?
+           ORDER BY created_at DESC
+           LIMIT 500`,
+        )
+        .bind(workspaceId)
+        .all<ReceiptRow>();
       const d1Receipts = (result.results ?? []).map(mapReceiptRow);
-      const memoryReceipts = getState().receipts.filter(
-        (receipt) => !d1Receipts.some((d1Receipt) => d1Receipt.receiptId === receipt.receiptId),
-      ).filter((receipt) => !workspaceId || receipt.workspaceId === workspaceId);
+      const memoryReceipts = getState()
+        .receipts.filter((receipt) => !d1Receipts.some((d1Receipt) => d1Receipt.receiptId === receipt.receiptId))
+        .filter((receipt) => receipt.workspaceId === workspaceId);
       return [...memoryReceipts, ...d1Receipts]
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .slice(0, 500);
@@ -1520,34 +1541,26 @@ export async function listReceipts(workspaceId?: string) {
     }
   }
 
-  return getState().receipts.filter((receipt) => !workspaceId || receipt.workspaceId === workspaceId);
+  return getState().receipts.filter((receipt) => receipt.workspaceId === workspaceId);
 }
 
-export async function getReceipt(receiptId: string, workspaceId?: string) {
+export async function getReceipt(receiptId: string, workspaceId: string) {
+  requireWorkspace(workspaceId, "getReceipt");
   const db = await getDb();
   const memoryReceipt = getState().receipts.find(
-    (receipt) => receipt.receiptId === receiptId && (!workspaceId || receipt.workspaceId === workspaceId),
+    (receipt) => receipt.receiptId === receiptId && receipt.workspaceId === workspaceId,
   );
   if (db) {
     try {
-      const statement = workspaceId
-        ? db
-            .prepare(
-              `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
+      const row = await db
+        .prepare(
+          `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
                   decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
-               FROM receipts
-               WHERE receipt_id = ? AND workspace_id = ?`,
-            )
-            .bind(receiptId, workspaceId)
-        : db
-            .prepare(
-              `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
-                  decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
-               FROM receipts
-               WHERE receipt_id = ?`,
-            )
-            .bind(receiptId);
-      const row = await statement.first<ReceiptRow>();
+           FROM receipts
+           WHERE receipt_id = ? AND workspace_id = ?`,
+        )
+        .bind(receiptId, workspaceId)
+        .first<ReceiptRow>();
       return row ? mapReceiptRow(row) : memoryReceipt;
     } catch (error) {
       warnD1Fallback("getReceipt", error);
@@ -1560,9 +1573,10 @@ export async function getReceipt(receiptId: string, workspaceId?: string) {
 
 export async function updateReceiptExecutionResult(
   receiptId: string,
-  workspaceId: string | undefined,
+  workspaceId: string,
   result: Partial<Pick<ActionReceipt, "provider" | "mode" | "stdout" | "stderr" | "exitCode" | "durationMs" | "error" | "feedback">>,
 ) {
+  requireWorkspace(workspaceId, "updateReceiptExecutionResult");
   const db = await getDb();
   if (db) {
     try {
@@ -1578,9 +1592,11 @@ export async function updateReceiptExecutionResult(
       if (result.feedback !== undefined) { sets.push("feedback = ?"); values.push(result.feedback); }
 
       if (sets.length > 0) {
-        const where = workspaceId ? "receipt_id = ? AND workspace_id = ?" : "receipt_id = ?";
-        values.push(receiptId, ...(workspaceId ? [workspaceId] : []));
-        await db.prepare(`UPDATE receipts SET ${sets.join(", ")} WHERE ${where}`).bind(...values).run();
+        values.push(receiptId, workspaceId);
+        await db
+          .prepare(`UPDATE receipts SET ${sets.join(", ")} WHERE receipt_id = ? AND workspace_id = ?`)
+          .bind(...values)
+          .run();
       }
     } catch (error) {
       warnD1Fallback("updateReceiptExecutionResult", error);
@@ -1723,8 +1739,9 @@ type ActionRunUpdate = Partial<{
 export async function updateActionRun(
   runId: string,
   updates: ActionRunUpdate,
-  workspaceId?: string,
+  workspaceId: string,
 ): Promise<ActionRun | undefined> {
+  requireWorkspace(workspaceId, "updateActionRun");
   const now = nowIso();
   const normalizedUpdates = { ...updates, updatedAt: now };
 
@@ -1761,9 +1778,11 @@ export async function updateActionRun(
       }
 
       if (sets.length > 0) {
-        const where = workspaceId ? "run_id = ? AND workspace_id = ?" : "run_id = ?";
-        values.push(runId, ...(workspaceId ? [workspaceId] : []));
-        await db.prepare(`UPDATE action_runs SET ${sets.join(", ")} WHERE ${where}`).bind(...values).run();
+        values.push(runId, workspaceId);
+        await db
+          .prepare(`UPDATE action_runs SET ${sets.join(", ")} WHERE run_id = ? AND workspace_id = ?`)
+          .bind(...values)
+          .run();
       }
     } catch (error) {
       warnD1Fallback("updateActionRun", error);
@@ -1771,7 +1790,7 @@ export async function updateActionRun(
   }
 
   const state = getState();
-  const memoryRun = state.actionRuns.find((run) => run.runId === runId && (!workspaceId || run.workspaceId === workspaceId));
+  const memoryRun = state.actionRuns.find((run) => run.runId === runId && run.workspaceId === workspaceId);
   if (memoryRun) {
     Object.assign(memoryRun, normalizedUpdates);
   }
@@ -1780,23 +1799,23 @@ export async function updateActionRun(
 }
 
 export async function listActionRuns(
-  workspaceId?: string,
+  workspaceId: string,
   projectId?: string,
   limit = 100,
 ): Promise<ActionRun[]> {
+  requireWorkspace(workspaceId, "listActionRuns");
   const db = await getDb();
   const memoryRuns = getState().actionRuns.filter(
-    (run) => (!workspaceId || run.workspaceId === workspaceId) && (!projectId || run.projectId === projectId),
+    (run) => run.workspaceId === workspaceId && (!projectId || run.projectId === projectId),
   );
 
   if (db) {
     try {
-      const conditions: string[] = [];
-      const values: unknown[] = [];
-      if (workspaceId) { conditions.push("workspace_id = ?"); values.push(workspaceId); }
+      const conditions: string[] = ["workspace_id = ?"];
+      const values: unknown[] = [workspaceId];
       if (projectId) { conditions.push("project_id = ?"); values.push(projectId); }
       values.push(limit);
-      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+      const where = `WHERE ${conditions.join(" AND ")}`;
       const result = await db
         .prepare(
           `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
@@ -1824,36 +1843,26 @@ export async function listActionRuns(
     .slice(0, limit);
 }
 
-export async function getActionRun(runId: string, workspaceId?: string): Promise<ActionRun | undefined> {
+export async function getActionRun(runId: string, workspaceId: string): Promise<ActionRun | undefined> {
+  requireWorkspace(workspaceId, "getActionRun");
   const db = await getDb();
   const memoryRun = getState().actionRuns.find(
-    (run) => run.runId === runId && (!workspaceId || run.workspaceId === workspaceId),
+    (run) => run.runId === runId && run.workspaceId === workspaceId,
   );
 
   if (db) {
     try {
-      const statement = workspaceId
-        ? db
-            .prepare(
-              `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
-                      action_json, decision, risk, policy, feedback, next_step, status, execution_target,
-                      sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
-                      error_message, duration_ms, created_at, updated_at, completed_at, approval_source
-               FROM action_runs
-               WHERE run_id = ? AND workspace_id = ?`,
-            )
-            .bind(runId, workspaceId)
-        : db
-            .prepare(
-              `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
-                      action_json, decision, risk, policy, feedback, next_step, status, execution_target,
-                      sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
-                      error_message, duration_ms, created_at, updated_at, completed_at, approval_source
-               FROM action_runs
-               WHERE run_id = ?`,
-            )
-            .bind(runId);
-      const row = await statement.first<ActionRunRow>();
+      const row = await db
+        .prepare(
+          `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+                  action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+                  sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+                  error_message, duration_ms, created_at, updated_at, completed_at, approval_source
+           FROM action_runs
+           WHERE run_id = ? AND workspace_id = ?`,
+        )
+        .bind(runId, workspaceId)
+        .first<ActionRunRow>();
       return row ? mapActionRunRow(row) : memoryRun;
     } catch (error) {
       warnD1Fallback("getActionRun", error);
@@ -2107,7 +2116,8 @@ export async function rejectActionRun(
   );
 }
 
-export async function getActionRunStats(workspaceId?: string): Promise<ActionRunStats> {
+export async function getActionRunStats(workspaceId: string): Promise<ActionRunStats> {
+  requireWorkspace(workspaceId, "getActionRunStats");
   const runs = await listActionRuns(workspaceId, undefined, 500);
   return {
     total: runs.length,
@@ -2119,7 +2129,8 @@ export async function getActionRunStats(workspaceId?: string): Promise<ActionRun
   };
 }
 
-export async function getReceiptStats(workspaceId?: string): Promise<ReceiptStats> {
+export async function getReceiptStats(workspaceId: string): Promise<ReceiptStats> {
+  requireWorkspace(workspaceId, "getReceiptStats");
   const db = await getDb();
   if (db) {
     try {
@@ -2485,19 +2496,21 @@ export async function getE2BApiKeyForExecution(apiKeyId = DEMO_API_KEY, workspac
   return envKey && !isPlaceholderE2BKey(envKey) ? envKey : undefined;
 }
 
-export async function revokeApiKey(apiKeyId: string, workspaceId?: string): Promise<boolean> {
+export async function revokeApiKey(apiKeyId: string, workspaceId: string): Promise<boolean> {
+  requireWorkspace(workspaceId, "revokeApiKey");
   const db = await getDb();
   if (db) {
     try {
       const result = await db
         .prepare(
-          workspaceId
-            ? "UPDATE api_keys SET revoked_at = ? WHERE api_key_id = ? AND workspace_id = ? AND revoked_at IS NULL"
-            : "UPDATE api_keys SET revoked_at = ? WHERE api_key_id = ? AND revoked_at IS NULL",
+          "UPDATE api_keys SET revoked_at = ? WHERE api_key_id = ? AND workspace_id = ? AND revoked_at IS NULL",
         )
-        .bind(nowIso(), apiKeyId, ...(workspaceId ? [workspaceId] : []))
+        .bind(nowIso(), apiKeyId, workspaceId)
         .run();
-      return Boolean(result.success);
+      // `success` is true for any statement that executed, including one that
+      // matched nothing. Revoking a key after an incident must not report
+      // success for a wrong id, an already-revoked key, or another tenant's key.
+      return (result.meta?.changes ?? 0) > 0;
     } catch (error) {
       warnD1Fallback("revokeApiKey", error);
     }
@@ -2505,7 +2518,7 @@ export async function revokeApiKey(apiKeyId: string, workspaceId?: string): Prom
 
   const state = getState();
   const record = state.apiKeysById[apiKeyId];
-  if (record && (!workspaceId || record.workspaceId === workspaceId)) {
+  if (record && record.workspaceId === workspaceId && !record.revokedAt) {
     record.revokedAt = nowIso();
     return true;
   }

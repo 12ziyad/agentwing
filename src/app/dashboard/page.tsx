@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { ReceiptsTable, StatsGrid } from "@/components/dashboard/ProductPanels";
 import { getActionRunStats, getReceiptStats, listActionRuns, listReceipts, getSandboxConfigForWorkspace, listCustomPolicies, listApprovals } from "@/lib/agentwingStore";
-import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
+import { requireDashboardSession } from "@/lib/dashboardSession";
 import type { ActionRunStats } from "@/lib/agentwingTypes";
 
 export const dynamic = "force-dynamic";
@@ -17,19 +16,14 @@ const onboarding = [
 ];
 
 export default async function DashboardPage() {
-  const cookieStore = await cookies();
-  const auth = await getDashboardAuthFromCookieHeader(
-    cookieStore.getAll().map((cookie) => `${cookie.name}=${encodeURIComponent(cookie.value)}`).join("; "),
-  );
-  const workspaceId = auth?.workspaceId;
-  const workspace = auth?.mode === "user" ? auth.workspace : undefined;
+  const { workspaceId, workspace } = await requireDashboardSession();
 
   const [stats, receipts, sandboxConfig, customPolicies, pendingApprovals, recentRuns, runStats] = await Promise.all([
     getReceiptStats(workspaceId),
     listReceipts(workspaceId),
-    workspaceId ? getSandboxConfigForWorkspace(workspaceId) : Promise.resolve(null),
-    workspaceId ? listCustomPolicies(workspaceId) : Promise.resolve([]),
-    workspaceId ? listApprovals(workspaceId, "pending") : Promise.resolve([]),
+    getSandboxConfigForWorkspace(workspaceId),
+    listCustomPolicies(workspaceId),
+    listApprovals(workspaceId, "pending"),
     listActionRuns(workspaceId, undefined, 5),
     getActionRunStats(workspaceId),
   ]);

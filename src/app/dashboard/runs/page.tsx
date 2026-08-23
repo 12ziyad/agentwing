@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { ArrowUpRight, Route } from "lucide-react";
 import { RunListApprovalActions } from "@/components/dashboard/RunListApprovalActions";
-import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
+import { requireDashboardSession } from "@/lib/dashboardSession";
 import { listActionRuns } from "@/lib/agentwingStore";
 import type { ActionRun } from "@/lib/agentwingTypes";
 
@@ -62,11 +61,8 @@ export default async function RunsPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status = "all" } = await searchParams;
-  const cookieStore = await cookies();
-  const auth = await getDashboardAuthFromCookieHeader(
-    cookieStore.getAll().map((cookie) => `${cookie.name}=${encodeURIComponent(cookie.value)}`).join("; "),
-  );
-  const allRuns = await listActionRuns(auth?.workspaceId, undefined, 100);
+  const { workspaceId } = await requireDashboardSession();
+  const allRuns = await listActionRuns(workspaceId, undefined, 100);
   const runs = filterRuns(allRuns, status);
 
   return (
