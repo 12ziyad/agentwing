@@ -14,7 +14,7 @@ import { MAX_LOG_LENGTH, redactLog, redactText, redactValue } from "@/lib/redact
 describe("credential formats are removed from text", () => {
   const cases: ReadonlyArray<readonly [label: string, input: string, secret: string]> = [
     ["bearer token", "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc.def", "eyJhbGciOiJIUzI1NiJ9.abc.def"],
-    ["AgentWing key", "using aw_live_1a0b11bda69f9d687e923632166a9f7360cd73d1", "1a0b11bda69f9d687e"],
+    ["AgentWing key", "using aw_live_0000dead0000beef0000cafe0000f00d0000ba5e", "0000dead0000beef"],
     ["E2B key", "E2B_API_KEY=e2b_1234567890abcdef", "1234567890abcdef"],
     ["OpenAI key", "OPENAI_API_KEY=sk-proj-abcdefghijklmnop", "abcdefghijklmnop"],
     ["GitHub token", "token ghp_abcdefghijklmnopqrstuvwxyz0123456789", "abcdefghijklmnopqrstuvwxyz"],

@@ -1,5 +1,34 @@
-E2B_API_KEY=e2b_your_key_here
-OPENAI_API_KEY=sk_your_key_here
-OPENAI_MODEL=gpt-4.1-mini
-DEMO_ACCESS_CODE=AGENTWING-BETA
-NEXTJS_ENV=development
+# AgentWing local development environment.
+#
+# Copy to .env.local and fill in. Never commit the filled-in file — .gitignore
+# already covers it, and a real value in this template is the mistake this file
+# exists to prevent.
+#
+# In production these are set with `wrangler secret put <NAME>`, not from a file.
+
+# ── Authentication (required to sign in) ────────────────────────────────────
+# Google OAuth credentials from https://console.cloud.google.com/apis/credentials
+# Authorised redirect URI: <AUTH_URL>/api/auth/callback/google
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# The origin AgentWing is served from. Used to build the OAuth redirect URI, so
+# it must match what is registered with Google exactly.
+AUTH_URL=http://localhost:3000
+
+# ── Operator access ─────────────────────────────────────────────────────────
+# Comma-separated emails allowed into /admin. Access requires a real Google
+# session AND membership of this list — there is no shared code or bypass.
+ADMIN_EMAILS=
+
+# ── Sandbox credentials at rest (required to save a BYOK E2B key) ───────────
+# Encrypts customer E2B keys before they are stored. Generate with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Losing or changing this makes every stored sandbox credential unreadable.
+AGENTWING_SANDBOX_SECRET=
+
+# ── Optional ────────────────────────────────────────────────────────────────
+# Fallback E2B key for local development only. Never set in production: it
+# would let a workspace with no key of its own execute on the operator's
+# account.
+# E2B_API_KEY=
