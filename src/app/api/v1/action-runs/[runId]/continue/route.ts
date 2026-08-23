@@ -1,6 +1,7 @@
-import { continueRunFromRunner } from "@/lib/actionRunLifecycle";
+import { continueRunFromRunner, RunTransitionError } from "@/lib/actionRunLifecycle";
 import { validateApiKeyFromRequest } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
+import type { RunAuthContext } from "@/lib/actionRunLifecycle";
 
 export const runtime = "nodejs";
 
@@ -9,27 +10,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ run
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+    return Response.json({ error: "Invalid JSON body.", code: "invalid_json" }, { status: 400 });
   }
 
   const { runId } = await params;
+  const payload = body && typeof body === "object" ? body : {};
+
+  let auth: RunAuthContext;
   const apiAuth = await validateApiKeyFromRequest(request);
   if (apiAuth) {
-    const run = await continueRunFromRunner(runId, apiAuth, body && typeof body === "object" ? body : {});
-    if (!run) return Response.json({ error: "Run not found." }, { status: 404 });
-    return Response.json({ run });
+    auth = apiAuth;
+  } else {
+    const dashboardAuth = await getDashboardAuth(request);
+    if (!dashboardAuth) return authRequiredResponse();
+    auth = { apiKeyId: "dashboard", workspaceId: dashboardAuth.workspaceId };
   }
 
-  const dashboardAuth = await getDashboardAuth(request);
-  if (!dashboardAuth) return authRequiredResponse();
-  if (!dashboardAuth.workspaceId) return Response.json({ error: "Workspace required." }, { status: 403 });
-
-  const run = await continueRunFromRunner(
-    runId,
-    { apiKeyId: "dashboard", workspaceId: dashboardAuth.workspaceId },
-    body && typeof body === "object" ? body : {},
-  );
-  if (!run) return Response.json({ error: "Run not found." }, { status: 404 });
-
-  return Response.json({ run });
+  try {
+    const run = await continueRunFromRunner(runId, auth, payload);
+    if (!run) return Response.json({ error: "Run not found.", code: "run_not_found" }, { status: 404 });
+    return Response.json({ run });
+  } catch (error) {
+    // An illegal transition is a conflict, not a bad request: the payload was
+    // well-formed, the run is simply not in a state that permits it.
+    if (error instanceof RunTransitionError) {
+      return Response.json({ error: error.message, code: error.code }, { status: error.status });
+    }
+    throw error;
+  }
 }

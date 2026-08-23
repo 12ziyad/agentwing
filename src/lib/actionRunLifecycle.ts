@@ -5,13 +5,10 @@ import {
   createActionRun,
   createApproval,
   createReceipt,
-  createRunnerApprovalToken,
-  consumeRunnerApprovalToken,
   getActionRun,
   getE2BApiKeyForExecution,
   incrementSandboxRunUsage,
   matchCustomPolicy,
-  rejectActionRun,
   trackEvent,
   updateActionRun,
   updateReceiptExecutionResult,
@@ -30,7 +27,6 @@ import {
 const MAX_COMMAND_LENGTH = 2000;
 const MAX_TARGET_LENGTH = 1000;
 const MAX_DESCRIPTION_LENGTH = 2000;
-const DEMO_WORKSPACE_ID = "workspace_demo";
 const TERMINAL_STATUSES = new Set<ActionRunStatus>([
   "blocked",
   "rejected",
@@ -40,9 +36,44 @@ const TERMINAL_STATUSES = new Set<ActionRunStatus>([
   "external_runner_required",
 ]);
 
+/**
+ * The only statuses from which an external runner may report that it executed.
+ *
+ * Every other status means execution was never authorised -- the run was
+ * blocked, rejected, is still waiting on a gate, or has already finished.
+ */
+const CAN_REPORT_EXECUTION = new Set<ActionRunStatus>([
+  "approved",
+  "checkpoint_created",
+  "external_runner_required",
+  "restore_point_required",
+]);
+
+/**
+ * An illegal state transition, distinguished from a missing run so routes can
+ * answer 409 rather than 404. The `code` is stable and documented for clients.
+ */
+export class RunTransitionError extends Error {
+  readonly code: string;
+  readonly status = 409;
+
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "RunTransitionError";
+    this.code = code;
+  }
+}
+
+/**
+ * The authenticated caller behind a run.
+ *
+ * `workspaceId` is required. It used to be optional and fall back to a shared
+ * demo workspace, which meant an unscoped caller silently wrote into -- and
+ * read from -- a tenant that was not theirs.
+ */
 export type RunAuthContext = {
   apiKeyId: string;
-  workspaceId?: string;
+  workspaceId: string;
   projectId?: string;
 };
 
@@ -169,7 +200,7 @@ export async function evaluateActionPolicy(
 }
 
 function runWorkspaceId(auth: RunAuthContext) {
-  return auth.workspaceId ?? DEMO_WORKSPACE_ID;
+  return auth.workspaceId;
 }
 
 function nowIso() {
@@ -529,45 +560,39 @@ export async function approveRunAndContinue(
   });
 }
 
-export async function createRunnerApprovalPayload(opts: {
+/**
+ * What an agent is told when its action needs human approval.
+ *
+ * Deliberately does NOT include an approval credential.
+ *
+ * This endpoint's caller is the agent whose action is being gated. Handing it
+ * the token that approves that action made the gate self-serve: two calls --
+ * propose, then approve with the token you were just given -- and the run was
+ * approved with the trail recording "Human approval was recorded." The audit
+ * log did not merely fail to notice, it asserted something false.
+ *
+ * The approval must come from a principal that is not the one being policed, so
+ * it is granted through the dashboard, where a human is authenticated
+ * separately. The agent gets a URL to surface and an id to poll.
+ */
+export async function createApprovalHandoff(opts: {
   run: ActionRun;
   origin: string;
   surface: "cli" | "ide" | "web" | "webhook";
   runnerId?: string;
 }) {
-  const { token, expiresAt } = await createRunnerApprovalToken({
-    runId: opts.run.runId,
-    workspaceId: opts.run.workspaceId,
-    surface: opts.surface,
-    runnerId: opts.runnerId,
-  });
   const base = opts.origin.replace(/\/$/, "");
 
   return {
     approvalId: opts.run.approvalId,
     approvalUrl: `${base}/dashboard/runs/${opts.run.runId}`,
-    surface: "dashboard_and_runner" as const,
-    runnerApprovalToken: token,
-    expiresAt,
-    approveEndpoint: `${base}/api/v1/action-runs/${opts.run.runId}/runner-approve`,
-    rejectEndpoint: `${base}/api/v1/action-runs/${opts.run.runId}/runner-reject`,
+    statusUrl: `${base}/api/v1/action-runs/${opts.run.runId}`,
+    surface: "dashboard" as const,
+    requestedSurface: opts.surface,
+    runnerId: opts.runnerId,
+    instructions:
+      "A human must approve this action in the AgentWing dashboard. Show the approval URL to your operator, then poll the status URL until the run leaves waiting_approval.",
   };
-}
-
-export async function approveRunWithRunnerToken(runId: string, token: string, reason?: string) {
-  const consumed = await consumeRunnerApprovalToken(runId, token);
-  if (!consumed.ok) return consumed;
-  const run = await approveRunAndContinue(runId, consumed.run.workspaceId, reason, consumed.source);
-  if (!run) return { ok: false as const, error: "Run not found.", status: 404, code: "run_not_found" };
-  return { ok: true as const, run };
-}
-
-export async function rejectRunWithRunnerToken(runId: string, token: string, reason?: string) {
-  const consumed = await consumeRunnerApprovalToken(runId, token);
-  if (!consumed.ok) return consumed;
-  const run = await rejectActionRun(runId, consumed.run.workspaceId, reason, consumed.source);
-  if (!run) return { ok: false as const, error: "Run not found.", status: 404, code: "run_not_found" };
-  return { ok: true as const, run };
 }
 
 export async function continueRunFromRunner(
@@ -593,6 +618,21 @@ export async function continueRunFromRunner(
   }
 
   if (body.executionResult) {
+    // A run may only report an execution result from a state where executing was
+    // actually permitted. Without this check, a run AgentWing blocked or a human
+    // rejected can be POSTed here and rewritten to `completed` with
+    // caller-supplied output -- which makes the receipt say the opposite of what
+    // the control plane decided, and lets the party being audited author the
+    // audit trail.
+    if (!CAN_REPORT_EXECUTION.has(run.status)) {
+      throw new RunTransitionError(
+        run.status === "blocked" || run.status === "rejected"
+          ? `This run was ${run.status} and cannot report an execution result.`
+          : `A run in status "${run.status}" cannot report an execution result.`,
+        run.status === "blocked" ? "blocked_action_cannot_execute" : "run_not_awaiting_execution",
+      );
+    }
+
     const result = body.executionResult;
     const exitCode = typeof result.exitCode === "number" ? result.exitCode : result.error ? 1 : 0;
     const status: ActionRunStatus = exitCode === 0 && !result.error ? "completed" : "failed";

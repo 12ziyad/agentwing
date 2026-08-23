@@ -1,6 +1,6 @@
 import {
   createExecutionRun,
-  createRunnerApprovalPayload,
+  createApprovalHandoff,
   parseAgentActionBody,
   parseRuntimeApprovalRequest,
 } from "@/lib/actionRunLifecycle";
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     run.status === "waiting_approval" &&
     runtime?.interactiveApproval &&
     runtime.surface
-      ? await createRunnerApprovalPayload({
+      ? await createApprovalHandoff({
           run,
           origin,
           surface: runtime.surface,
