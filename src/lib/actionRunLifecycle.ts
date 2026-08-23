@@ -14,6 +14,7 @@ import {
   updateReceiptExecutionResult,
 } from "@/lib/agentwingStore";
 import { sandboxRunLimitExceeded } from "@/lib/rateLimit";
+import { redactLog } from "@/lib/redact";
 import { runE2BSandbox } from "@/lib/sandbox/providers/e2b";
 import {
   actionTypes,
@@ -207,17 +208,6 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function redactLog(value?: string) {
-  if (!value) return value;
-  return value
-    .replace(/authorization\s*:\s*bearer\s+[A-Za-z0-9._-]+/gi, "authorization: bearer [redacted]")
-    .replace(/\b(?:aw_live|aw_test)_[A-Za-z0-9._-]+/g, "aw_[redacted]")
-    .replace(/\be2b_[A-Za-z0-9._-]+/g, "e2b_[redacted]")
-    .replace(/\bsk-[A-Za-z0-9._-]+/g, "sk-[redacted]")
-    .replace(/\bproj_[A-Za-z0-9._-]+/g, "proj_[redacted]")
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email redacted]")
-    .slice(0, 8000);
-}
 
 function actionLabel(action: AgentAction) {
   return action.command || action.target || action.description || action.actionType;

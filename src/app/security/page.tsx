@@ -4,10 +4,10 @@ const measures = [
   { title: "Google OAuth only", body: "AgentWing uses Google sign-in. No password is stored by AgentWing. No email/password login exists." },
   { title: "API keys hashed at rest", body: "Generated API keys are shown once and stored as a SHA-256 hash. The full key cannot be retrieved after creation." },
   { title: "BYOK keys encrypted server-side", body: "E2B and other BYOK sandbox provider keys are encrypted using AES-GCM with a Cloudflare Worker secret. The raw key is never returned to the browser." },
-  { title: "Workspace isolation", body: "Every database query filters by workspace_id. Users cannot access data from other workspaces." },
+  { title: "Workspace isolation", body: "Every query that touches tenant data requires a workspace id in its type signature, so a query cannot be written without one. A runtime check backs this up for callers the compiler cannot see." },
   { title: "Receipts avoid secrets", body: "Audit receipts record action metadata and decisions, not file contents. Secret-bearing files like .env are blocked before their contents can be exposed." },
   { title: "Admin console restricted", body: "The admin console (/admin) is restricted to accounts listed in the ADMIN_EMAILS server environment variable. It is not visible in the normal user dashboard or navigation." },
-  { title: "No raw keys in logs", body: "API keys, E2B keys, and OAuth tokens are never logged in plaintext. Event metadata is sanitized before storage." },
+  { title: "Output is redacted before storage", body: "Command output, error text, and event metadata are scanned for known credential formats — bearer tokens, AgentWing/E2B/OpenAI/GitHub/Google keys, private key blocks and email addresses — and redacted before they are written or returned." },
   { title: "Revocation", body: "API keys can be revoked immediately. Revoked keys fail authentication on the next call." },
 ];
 

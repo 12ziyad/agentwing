@@ -73,53 +73,50 @@ const responseExample = `{
   "receiptId": "aw_receipt_..."
 }`;
 
-const runtimeApprovalSdkExample = `import { AgentWing } from "@agentwing/sdk";
-import * as readline from "node:readline/promises";
+const approvalHandoffExample = `import { AgentWing } from "@agentwing/sdk";
 
 const aw = new AgentWing({ apiKey: process.env.AGENTWING_API_KEY });
 
-const { run } = await aw.executeAction(
-  { actionType: "deploy_action", target: "production", description: "Deploy to prod" },
-  {
-    runtime: {
-      surface: "cli",
-      onApprovalRequired: async ({ approval }) => {
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-        const answer = await rl.question(\`Approve deploy? (y/n) \`);
-        rl.close();
-        return answer.trim().toLowerCase() === "y" ? "approve" : "reject";
-      },
-    },
-  },
-);
-console.log("Final status:", run.status);`;
+const { run, approval } = await aw.executeAction({
+  actionType: "deploy_action",
+  target: "production",
+  description: "Deploy to prod",
+});
 
-const runtimeApprovalCurlApprove = `# 1. Execute action and capture the runner token from the response:
+if (run.status === "waiting_approval") {
+  // Surface this to your operator. AgentWing deliberately does NOT hand the
+  // agent a credential that would approve its own action.
+  console.log("Approve at:", approval.approvalUrl);
+
+  // Then poll until a human decides.
+  let current = run;
+  while (current.status === "waiting_approval") {
+    await new Promise((r) => setTimeout(r, 3000));
+    current = await aw.getActionRun(run.runId);
+  }
+  console.log("Operator decided:", current.status);
+}`;
+
+const approvalCurlExample = `# 1. Propose the action. A gated action comes back waiting_approval.
 curl -X POST https://agentwing.gpmai.dev/api/v1/execute-action \\
   -H "Authorization: Bearer AW_LIVE_KEY_HERE" \\
   -H "Content-Type: application/json" \\
-  -d '{"actionType":"deploy_action","target":"production","runtime":{"surface":"cli","interactiveApproval":true}}'
-# Response includes: approval.runnerApprovalToken and approval.approveEndpoint
+  -d '{"actionType":"deploy_action","target":"production","description":"Deploy to prod"}'
 
-# 2. Approve using the runner token in the Authorization header:
-curl -X POST https://agentwing.gpmai.dev/api/v1/action-runs/RUN_ID/runner-approve \\
-  -H "Authorization: Bearer aw_rat_RUNNER_TOKEN_HERE" \\
-  -H "Content-Type: application/json" \\
-  -d '{}'
+# Response contains run.status = "waiting_approval" and:
+#   approval.approvalUrl  -> where a human approves
+#   approval.statusUrl    -> poll this until the status changes
+#
+# It does NOT contain an approval credential. The agent proposing an action
+# cannot approve it.
 
-# Or reject:
-curl -X POST https://agentwing.gpmai.dev/api/v1/action-runs/RUN_ID/runner-reject \\
-  -H "Authorization: Bearer aw_rat_RUNNER_TOKEN_HERE" \\
-  -H "Content-Type: application/json" \\
-  -d '{"reason":"Not safe to deploy right now."}'
+# 2. A human approves in the dashboard, or with their own session:
+#    POST /api/v1/action-runs/RUN_ID/approve
+#    POST /api/v1/action-runs/RUN_ID/reject
 
-# Legacy body-param form also still works (back-compat):
-curl -X POST .../runner-approve \\
-  -H "Authorization: Bearer AW_LIVE_KEY_HERE" \\
-  -H "Content-Type: application/json" \\
-  -d '{"runnerApprovalToken":"aw_rat_..."}'
-
-# aw_live_ key ALONE (no runner token) → 400 missing_runner_approval_token`;
+# 3. Poll for the outcome:
+curl https://agentwing.gpmai.dev/api/v1/action-runs/RUN_ID \\
+  -H "Authorization: Bearer AW_LIVE_KEY_HERE"`;
 
 const customPolicyExample = `// Create a policy via dashboard /dashboard/policies
 // or via API (authenticated dashboard session):
@@ -158,44 +155,38 @@ export default function DocsPage() {
           AgentWing — Runtime control layer for AI agents
         </h1>
         <p className="mt-5 max-w-3xl text-base leading-7 text-slate-300">
-          Policy decisions, approval gates, sandbox routing, restore points, execution logs, and audit receipts before tools run.
+          Policy decisions, approval gates, BYOK sandbox execution, execution logs, and audit receipts — before your tools run.
         </p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
-          {["Policy checks", "Approval gates", "Sandbox routing", "Restore points", "Structured feedback", "Audit receipts"].map((item) => (
+          {["Policy checks", "Approval gates", "BYOK sandbox (E2B)", "Custom policies", "Structured feedback", "Audit receipts"].map((item) => (
             <div key={item} className="rounded-md border border-white/[0.08] bg-[#080b12] p-4 text-sm font-semibold text-white">
               {item}
             </div>
           ))}
         </div>
 
-        <DocSection title="0. Interactive runtime approval (SDK quickstart)">
-          <p className="mb-4 text-sm leading-6 text-slate-300">
-            Use <code className="font-mono text-cyan-100">executeAction</code> with{" "}
-            <code className="font-mono text-cyan-100">runtime.onApprovalRequired</code> to handle approval gates directly inside your runner.
-            The SDK calls your callback with the run and a{" "}
-            <code className="font-mono text-cyan-100">RunnerApproval</code> object, then automatically POSTs{" "}
-            the decision to the approve/reject endpoint using{" "}
-            <code className="font-mono text-cyan-100">Authorization: Bearer &lt;runnerApprovalToken&gt;</code>.
+        <DocSection title="0. Approval gates">
+          <p className="mb-3 text-sm leading-6 text-slate-300">
+            When a decision is <code className="font-mono text-cyan-100">approval_required</code>, the run parks at{" "}
+            <code className="font-mono text-cyan-100">waiting_approval</code> and the response tells your agent where a
+            human can approve and how to poll for the outcome.
           </p>
-          <CodeBlock label="TypeScript / Node.js SDK" code={runtimeApprovalSdkExample} />
-          <p className="mb-3 mt-2 text-sm leading-6 text-slate-300">
-            You can also call the approve/reject endpoints directly. The runner approval token{" "}
-            (<code className="font-mono text-cyan-100">aw_rat_…</code>) is accepted in the{" "}
-            <code className="font-mono text-cyan-100">Authorization</code> header <em>or</em> in{" "}
-            <code className="font-mono text-cyan-100">body.runnerApprovalToken</code>. An{" "}
-            <code className="font-mono text-cyan-100">aw_live_</code> key alone cannot approve — a runner token is always required.
-          </p>
-          <CodeBlock label="Low-level cURL" code={runtimeApprovalCurlApprove} />
+          <div className="mb-4 rounded border border-cyan-300/20 bg-cyan-300/[0.04] px-3 py-2 text-xs leading-5 text-cyan-100">
+            <strong className="font-semibold">The response carries no approval credential.</strong> The agent proposing
+            an action cannot approve it — that separation is the whole point of an approval gate, so approval happens
+            through a separately-authenticated human session in the dashboard.
+          </div>
+          <CodeBlock label="TypeScript / Node.js SDK" code={approvalHandoffExample} />
+          <CodeBlock label="cURL" code={approvalCurlExample} />
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {[
-              ["missing_runner_approval_token (400)", "No runner token found in header or body."],
-              ["invalid_runner_token (401)", "Token not found or does not match this run."],
-              ["expired_runner_token (401)", "Token expired (default TTL 15 min)."],
-              ["runner_token_already_used (409)", "One-time token already consumed."],
-              ["run_not_waiting_approval (409)", "Run is not in waiting_approval state."],
-              ["blocked_action_cannot_be_approved (409)", "block decisions can never be approved."],
-              ["run_not_found (404)", "Run ID not found."],
+              ["run_not_found (404)", "Run ID not found, or it belongs to another workspace."],
+              ["blocked_action_cannot_execute (409)", "A blocked run can never report an execution result."],
+              ["run_not_awaiting_execution (409)", "The run is not in a status where executing was authorised."],
+              ["policy_store_unavailable (503)", "Policies could not be read, so no decision was made. Retry."],
+              ["rate_limited (429)", "Too many requests in the current window. Honour Retry-After."],
+              ["plan_limit_reached (429)", "The API key has used its plan allowance."],
             ].map(([code, desc]) => (
               <div key={code} className="rounded border border-white/[0.08] bg-[#05070d] p-3">
                 <p className="font-mono text-xs text-red-300">{code}</p>
@@ -303,8 +294,8 @@ export default function DocsPage() {
             <li>• API keys are shown once and stored as a SHA-256 hash. They cannot be retrieved after generation.</li>
 
             <li>• E2B keys are encrypted server-side with AES-GCM. The raw key is never returned to the browser.</li>
-            <li>• AgentWing never exposes secrets in API responses or logs.</li>
-            <li>• Each user&apos;s data is scoped to their workspace — users cannot access other workspaces.</li>
+            <li>• Command output, error text, and event metadata are redacted for known credential formats before they are stored or returned.</li>
+            <li>• Every query carrying tenant data requires a workspace, enforced by the type signatures rather than by convention.</li>
             <li>• The admin console requires a verified admin email set in <code className="font-mono text-cyan-100">ADMIN_EMAILS</code>.</li>
             <li>• Authentication is Google OAuth only. No password is stored.</li>
           </ul>

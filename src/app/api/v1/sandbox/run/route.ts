@@ -1,8 +1,10 @@
-import { evaluateAgentAction } from "@/lib/agentwingPolicy";
+import { evaluateActionPolicy } from "@/lib/actionRunLifecycle";
+import { redactLog } from "@/lib/redact";
 import {
   createReceipt,
   getE2BApiKeyForExecution,
   incrementSandboxRunUsage,
+  PolicyStoreUnavailableError,
   unauthorizedResponse,
   validateApiKeyFromRequest,
 } from "@/lib/agentwingStore";
@@ -114,16 +116,34 @@ export async function POST(request: Request) {
     return sandboxRunLimitResponse(usage);
   }
 
-  const evaluation = evaluateAgentAction(action);
-  if (evaluation.decision === "block") {
+  // Route through the shared composition so custom policies apply here too.
+  // This endpoint used to call the default engine directly, so a workspace's
+  // own BLOCK rules were silently ignored on the one route that actually
+  // executes code.
+  let evaluation;
+  try {
+    evaluation = await evaluateActionPolicy(action, auth.workspaceId, auth.projectId);
+  } catch (error) {
+    if (error instanceof PolicyStoreUnavailableError) {
+      return Response.json(
+        { error: error.message, code: error.code },
+        { status: error.status, headers: { "retry-after": "5" } },
+      );
+    }
+    throw error;
+  }
+
+  // Only two verdicts permit execution. Previously only `block` was honoured,
+  // so an `approval_required` decision was ignored and the command ran anyway.
+  if (evaluation.decision !== "sandbox_required" && evaluation.decision !== "allow") {
     return receiptForSandboxFailure(
       action,
       evaluation,
       auth.apiKeyId,
       evaluation.feedback,
-      "AgentWing policy blocked this action before sandbox execution.",
+      `AgentWing returned "${evaluation.decision}" for this action, so it was not executed.`,
       auth.workspaceId,
-      403,
+      evaluation.decision === "block" ? 403 : 409,
     );
   }
 
@@ -160,11 +180,11 @@ export async function POST(request: Request) {
           result.exitCode === 0
             ? "Sandbox run completed in E2B."
             : "Sandbox run completed in E2B with a non-zero exit code.",
-        stdout: result.stdout,
-        stderr: result.stderr,
+        stdout: redactLog(result.stdout),
+        stderr: redactLog(result.stderr),
         exitCode: result.exitCode,
         durationMs: result.durationMs,
-        error: result.error,
+        error: redactLog(result.error),
       },
       auth.apiKeyId,
       auth.workspaceId,
@@ -175,19 +195,23 @@ export async function POST(request: Request) {
       provider: "e2b-byok",
       mode: "real-e2b",
       receiptId: receipt.receiptId,
-      stdout: result.stdout,
-      stderr: result.stderr,
+      // Redacted on the way out as well as into storage: sandbox output
+      // routinely contains credentials the agent printed, and this endpoint
+      // previously echoed and persisted it verbatim while the parallel run
+      // path redacted the identical values.
+      stdout: redactLog(result.stdout),
+      stderr: redactLog(result.stderr),
       exitCode: result.exitCode,
       durationMs: result.durationMs,
       sandboxId: result.sandboxId,
-      error: result.error,
+      error: redactLog(result.error),
       decision: receipt.decision,
       risk: receipt.risk,
       policy: receipt.policy,
       feedback: receipt.feedback,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "E2B sandbox execution failed.";
+    const message = redactLog(error instanceof Error ? error.message : "E2B sandbox execution failed.") ?? "E2B sandbox execution failed.";
     return receiptForSandboxFailure(
       action,
       evaluation,

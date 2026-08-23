@@ -1,5 +1,6 @@
 import { getAgentWingD1, type AgentWingD1Database } from "./cloudflareD1";
 import { criterionMatches } from "./policyPattern";
+import { redactValue } from "./redact";
 import type {
   ActionReceipt,
   AgentAction,
@@ -3198,8 +3199,12 @@ export async function trackEvent(
   const db = await getDb();
   if (!db) return;
   try {
+    // Redact before storage. This used to stringify and truncate only, so an
+    // event carrying an email, a key, or a command with an inline credential
+    // stored it verbatim -- while the security page claimed metadata was
+    // sanitized.
     const safeMetadata = options.metadata
-      ? JSON.stringify(options.metadata).slice(0, 4096)
+      ? JSON.stringify(redactValue(options.metadata)).slice(0, 4096)
       : null;
     await db
       .prepare(
