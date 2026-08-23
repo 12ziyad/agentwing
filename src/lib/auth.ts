@@ -162,7 +162,7 @@ export function authRequiredResponse() {
   return Response.json(
     {
       error: "Dashboard sign-in required",
-      feedback: "Sign in with Google or use the admin access fallback from /dashboard.",
+      feedback: "Sign in at /dashboard to continue.",
     },
     { status: 401 },
   );
