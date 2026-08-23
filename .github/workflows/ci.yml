@@ -40,6 +40,9 @@ jobs:
       - name: Lint
         run: npx eslint src --max-warnings=0
 
+      - name: Dead code
+        run: npm run check:dead-code
+
       - name: Test
         run: npm test
 
