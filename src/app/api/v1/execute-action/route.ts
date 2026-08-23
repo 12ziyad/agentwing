@@ -7,6 +7,7 @@ import {
 import {
   getSandboxConfig,
   incrementActionCheckUsage,
+  PolicyStoreUnavailableError,
   sandboxOwnerKeyForWorkspace,
   trackEvent,
   unauthorizedResponse,
@@ -51,7 +52,21 @@ export async function POST(request: Request) {
     return actionCheckLimitResponse(usage);
   }
 
-  const run = await createExecutionRun(action, auth);
+  let run;
+  try {
+    run = await createExecutionRun(action, auth);
+  } catch (error) {
+    // Fail closed. Without the workspace's policies we cannot know whether this
+    // action is allowed, and deciding from defaults alone could permit
+    // something the workspace explicitly blocks.
+    if (error instanceof PolicyStoreUnavailableError) {
+      return Response.json(
+        { error: error.message, code: error.code },
+        { status: error.status, headers: { "retry-after": "5" } },
+      );
+    }
+    throw error;
+  }
   const runtime = parseRuntimeApprovalRequest(body);
   const origin = new URL(request.url).origin;
   const approval =

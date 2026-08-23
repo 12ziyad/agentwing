@@ -1,10 +1,9 @@
-import { evaluateAgentAction } from "@/lib/agentwingPolicy";
-import { isMandatoryDefaultBlock, nextStepForDecision } from "@/lib/actionRunLifecycle";
+import { evaluateActionPolicy, nextStepForDecision } from "@/lib/actionRunLifecycle";
 import {
   createApproval,
   createReceipt,
   incrementActionCheckUsage,
-  matchCustomPolicy,
+  PolicyStoreUnavailableError,
   trackEvent,
   unauthorizedResponse,
   validateApiKeyFromRequest,
@@ -86,30 +85,23 @@ export async function POST(request: Request) {
     return actionCheckLimitResponse(usage);
   }
 
+  // One composition implementation, shared with /execute-action. This route
+  // used to carry its own copy, so a change to how custom policies layer over
+  // defaults could apply to one endpoint and not the other.
   let evaluation: PolicyEvaluation;
-  const defaultEvaluation = evaluateAgentAction(action);
-
-  if (isMandatoryDefaultBlock(defaultEvaluation)) {
-    evaluation = defaultEvaluation;
-  } else if (auth.workspaceId) {
-    const customMatch = await matchCustomPolicy(action, auth.workspaceId, auth.projectId);
-    if (customMatch) {
-      evaluation = {
-        decision: customMatch.decision,
-        risk: customMatch.risk,
-        policy: `custom:${customMatch.policyId}:${customMatch.name}`,
-        feedback: customMatch.feedback ?? `Custom policy "${customMatch.name}" matched.`,
-      };
-      await trackEvent("custom_policy_matched", {
-        workspaceId: auth.workspaceId,
-        projectId: auth.projectId,
-        metadata: { policyId: customMatch.policyId, decision: customMatch.decision },
-      });
-    } else {
-      evaluation = defaultEvaluation;
+  try {
+    evaluation = await evaluateActionPolicy(action, auth.workspaceId, auth.projectId);
+  } catch (error) {
+    if (error instanceof PolicyStoreUnavailableError) {
+      // Fail closed: without the workspace's policies we cannot know whether
+      // this action is allowed, and answering from defaults alone could permit
+      // something the workspace blocks.
+      return Response.json(
+        { error: error.message, code: error.code },
+        { status: error.status, headers: { "retry-after": "5" } },
+      );
     }
-  } else {
-    evaluation = defaultEvaluation;
+    throw error;
   }
 
   const receipt = await createReceipt(action, evaluation, auth.apiKeyId, auth.workspaceId);

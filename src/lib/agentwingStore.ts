@@ -1,4 +1,5 @@
 import { getAgentWingD1, type AgentWingD1Database } from "./cloudflareD1";
+import { criterionMatches } from "./policyPattern";
 import type {
   ActionReceipt,
   AgentAction,
@@ -249,6 +250,23 @@ const BETA_ACTION_CHECK_LIMIT = 1000;
 const BETA_SANDBOX_RUN_LIMIT = 20;
 const DEMO_PROJECT_ID = "proj_demo_runtime_lab";
 const DEMO_WORKSPACE_ID = "workspace_demo";
+
+/**
+ * The policy store could not be read.
+ *
+ * Distinct from "there are no policies", which is a valid answer. Callers must
+ * refuse the request rather than fall through to default rules, because a
+ * workspace's BLOCK rules may be exactly what could not be loaded.
+ */
+export class PolicyStoreUnavailableError extends Error {
+  readonly code = "policy_store_unavailable";
+  readonly status = 503;
+
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "PolicyStoreUnavailableError";
+  }
+}
 
 /**
  * Every read and write of tenant data must be scoped to exactly one workspace.
@@ -2547,8 +2565,21 @@ export async function listCustomPolicies(workspaceId: string, projectId?: string
         .bind(...values)
         .all<CustomPolicyRow>();
       return (result.results ?? []).map(mapCustomPolicyRow);
-    } catch {
-      return [];
+    } catch (error) {
+      // Fail CLOSED.
+      //
+      // This used to be `catch { return []; }`, and the caller reads an empty
+      // list as "no custom rule matched" and falls through to the defaults. A
+      // D1 timeout or a schema drift therefore silently disabled every
+      // customer BLOCK rule, with no log and no error — the failure mode was
+      // indistinguishable from a workspace that had written no policies.
+      //
+      // A control plane that cannot read its policies does not know whether the
+      // action is allowed, and must say so rather than guess.
+      throw new PolicyStoreUnavailableError(
+        "Custom policies could not be read, so this action cannot be decided.",
+        error,
+      );
     }
   }
   return [];
@@ -2669,23 +2700,39 @@ export async function deleteCustomPolicy(policyId: string, workspaceId: string):
   }
 }
 
-function wildcardToRegex(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
-  return new RegExp(escaped, "i");
-}
+/**
+ * Whether a custom policy applies to an action.
+ *
+ * Two properties this must hold, both of which the previous implementation
+ * broke:
+ *
+ *   - A declared criterion that cannot be evaluated FAILS. Guarding each
+ *     criterion with `if (policy.targetPattern && action.target)` meant an
+ *     action that omitted `target` skipped the constraint entirely, so a policy
+ *     scoped to `safe/*` matched a shell command with no target.
+ *   - A policy with no criteria at all matches NOTHING. Combined with the
+ *     above, a criteria-less `allow` policy previously matched every action and
+ *     neutralised every non-mandatory default rule — and any authenticated
+ *     session could write one.
+ */
+export function policyMatches(
+  policy: import("./agentwingTypes").CustomPolicy,
+  action: import("./agentwingTypes").AgentAction,
+): boolean {
+  const hasCriterion = Boolean(policy.actionType || policy.tool || policy.targetPattern || policy.commandPattern);
+  if (!hasCriterion) return false;
 
-function policyMatches(policy: import("./agentwingTypes").CustomPolicy, action: import("./agentwingTypes").AgentAction): boolean {
   if (policy.actionType && policy.actionType !== action.actionType) return false;
+
   if (policy.tool) {
-    const actionTool = (action.tool ?? "").toLowerCase();
+    const actionTool = action.tool?.toLowerCase();
+    if (!actionTool) return false;
     if (!actionTool.includes(policy.tool.toLowerCase())) return false;
   }
-  if (policy.targetPattern && action.target) {
-    if (!wildcardToRegex(policy.targetPattern).test(action.target)) return false;
-  }
-  if (policy.commandPattern && (action.command ?? action.target)) {
-    if (!wildcardToRegex(policy.commandPattern).test(action.command ?? action.target ?? "")) return false;
-  }
+
+  if (!criterionMatches(policy.targetPattern, action.target)) return false;
+  if (!criterionMatches(policy.commandPattern, action.command ?? action.target)) return false;
+
   return true;
 }
 
