@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check:dead-code": "node scripts/check-dead-code.mjs",
-    "build:sdk": "npm run build --workspace @agentwing/sdk"
+    "build:sdk": "npm run build --workspace @agentwing/sdk",
+    "deploy:jobs": "wrangler deploy --config wrangler.jobs.jsonc"
   },
   "dependencies": {
     "@e2b/code-interpreter": "^2.4.2",

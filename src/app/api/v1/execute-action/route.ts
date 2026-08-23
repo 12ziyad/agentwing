@@ -15,6 +15,14 @@ import {
 } from "@/lib/agentwingStore";
 import { actionCheckLimitExceeded, actionCheckLimitResponse } from "@/lib/rateLimit";
 import { actionTypes } from "@/lib/agentwingTypes";
+import { getAgentWingD1 } from "@/lib/cloudflareD1";
+import {
+  findReplay,
+  IdempotencyConflictError,
+  readIdempotencyKey,
+  rememberResponse,
+  requestFingerprint,
+} from "@/lib/idempotency";
 
 export const runtime = "nodejs";
 
@@ -41,6 +49,31 @@ export async function POST(request: Request) {
       },
       { status: 400 },
     );
+  }
+
+  // Idempotency. A retried execute-action would otherwise create a second run
+  // AND a second receipt for one real intent, which does not merely waste quota
+  // -- it makes the audit trail show two attempts where there was one.
+  const idempotencyKey = readIdempotencyKey(request);
+  const db = idempotencyKey ? await getAgentWingD1() : undefined;
+  let fingerprint: string | undefined;
+
+  if (idempotencyKey && db) {
+    fingerprint = await requestFingerprint("POST", "/api/v1/execute-action", body);
+    try {
+      const replay = await findReplay(db, auth.workspaceId, idempotencyKey, fingerprint);
+      if (replay) {
+        return Response.json(replay.body as Record<string, unknown>, {
+          status: replay.status,
+          headers: { "idempotent-replay": "true" },
+        });
+      }
+    } catch (error) {
+      if (error instanceof IdempotencyConflictError) {
+        return Response.json({ error: error.message, code: error.code }, { status: error.status });
+      }
+      throw error;
+    }
   }
 
   const usage = await incrementActionCheckUsage(auth.apiKeyId);
@@ -110,7 +143,7 @@ export async function POST(request: Request) {
     },
   });
 
-  return Response.json({
+  const responseBody: Record<string, unknown> = {
     run,
     runId: run.runId,
     receiptId: run.receiptId,
@@ -126,5 +159,18 @@ export async function POST(request: Request) {
       : run.nextStep,
     ...(approval ? { approval } : {}),
     ...(sandbox ? { sandbox } : {}),
-  });
+  };
+
+  // Remember the response so a retry replays it rather than creating a second
+  // run. Best-effort: the run already exists and returning it matters more than
+  // recording the key.
+  if (idempotencyKey && db && fingerprint) {
+    try {
+      await rememberResponse(db, auth.workspaceId, idempotencyKey, fingerprint, { status: 200, body: responseBody });
+    } catch {
+      // intentional: failing to record the key must not fail the request.
+    }
+  }
+
+  return Response.json(responseBody);
 }

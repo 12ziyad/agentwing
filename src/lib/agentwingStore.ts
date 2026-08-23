@@ -3,6 +3,7 @@ import { criterionMatches } from "./policyPattern";
 import { redactValue } from "./redact";
 import { DEFAULT_ROLE, isRole } from "./rbac";
 import { appendReceiptToChain } from "./receiptChainStore";
+import { emitEvent } from "./webhookStore";
 import type {
   ActionReceipt,
   AgentAction,
@@ -2166,6 +2167,23 @@ export async function consumeRunnerApprovalToken(
   return { ok: true, run, source: `runner_${record.surface}`, runnerId: record.runnerId };
 }
 
+/**
+ * Queue a webhook event without letting it affect the operation that produced
+ * it. The state change is already durable by the time this runs.
+ */
+async function notifyWebhooks(
+  workspaceId: string,
+  type: Parameters<typeof emitEvent>[1]["type"],
+  data: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const db = await getDb();
+    if (db) await emitEvent(db, { type, workspaceId, data });
+  } catch {
+    // intentional: notification is a convenience, not part of the decision.
+  }
+}
+
 export async function continueActionRunAfterApproval(
   runId: string,
   workspaceId: string,
@@ -2181,6 +2199,7 @@ export async function continueActionRunAfterApproval(
   }
 
   await appendExecutionEvent(runId, "approval_approved", `Approved by ${resolvedBy}.`, { source: approvalSource, resolvedBy });
+  await notifyWebhooks(workspaceId, "approval.resolved", { runId, status: "approved", resolvedBy, source: approvalSource });
   return updateActionRun(
     runId,
     {
@@ -2207,6 +2226,7 @@ export async function rejectActionRun(
   }
 
   await appendExecutionEvent(runId, "approval_rejected", `Rejected by ${resolvedBy}.`, { source: approvalSource, resolvedBy });
+  await notifyWebhooks(workspaceId, "approval.resolved", { runId, status: "rejected", resolvedBy, source: approvalSource });
   return updateActionRun(
     runId,
     {

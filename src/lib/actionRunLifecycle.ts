@@ -15,6 +15,8 @@ import {
 } from "@/lib/agentwingStore";
 import { sandboxRunLimitExceeded } from "@/lib/rateLimit";
 import { redactLog } from "@/lib/redact";
+import { getAgentWingD1 } from "@/lib/cloudflareD1";
+import { emitEvent } from "@/lib/webhookStore";
 import { runE2BSandbox } from "@/lib/sandbox/providers/e2b";
 import {
   actionTypes,
@@ -322,11 +324,28 @@ export async function createExecutionRun(action: AgentAction, auth: RunAuthConte
 
   if (evaluation.decision === "block") {
     await appendExecutionEvent(run.runId, "execution_skipped", "Blocked actions never execute.");
+    await notify(workspaceId, "action.blocked", {
+      runId: run.runId,
+      receiptId: receipt.receiptId,
+      policy: evaluation.policy,
+      risk: evaluation.risk,
+      action: summarizeAction(action),
+    });
     return run;
   }
 
   if (evaluation.decision === "approval_required") {
     await appendExecutionEvent(run.runId, "approval_requested", "Human approval is required before execution.");
+    // This is why webhooks exist: an approval gate needs a way to reach a
+    // human that is not "the agent tells them".
+    await notify(workspaceId, "approval.requested", {
+      runId: run.runId,
+      approvalId,
+      receiptId: receipt.receiptId,
+      policy: evaluation.policy,
+      risk: evaluation.risk,
+      action: summarizeAction(action),
+    });
     return run;
   }
 
@@ -549,6 +568,28 @@ export async function approveRunAndContinue(
     workspaceId,
     projectId: approvedRun.projectId,
   });
+}
+
+/**
+ * Notify a workspace's webhook endpoints, without letting that slow or break
+ * the decision it describes.
+ *
+ * Events are queued to the database, not delivered here — a hostile or merely
+ * slow endpoint must never add latency to the path that decides whether an
+ * agent may act, and must never fail it.
+ */
+async function notify(
+  workspaceId: string,
+  type: Parameters<typeof emitEvent>[1]["type"],
+  data: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const db = await getAgentWingD1();
+    if (db) await emitEvent(db, { type, workspaceId, data });
+  } catch {
+    // intentional: a webhook queue failure must not fail the decision. The
+    // receipt is already written; the notification is a convenience.
+  }
 }
 
 /**

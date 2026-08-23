@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "agentwing-jobs",
+  "main": "workers/jobs/index.ts",
+  "compatibility_date": "2026-05-16",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Runs separately from the request Worker so background sweeps do not consume
+  // the D1 throughput budget of user traffic, and so their usage is separately
+  // attributable in logs.
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "AGENTWING_DB",
+      "database_name": "agentwing_v1",
+      "database_id": "b146a8aa-141a-41bb-a70b-fe939832acd6"
+    }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+}
