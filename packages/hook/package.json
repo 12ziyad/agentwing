@@ -1,0 +1,33 @@
+{
+  "name": "@agentwing/hook",
+  "version": "0.1.0",
+  "description": "Check every AI coding agent tool call before it runs — a PreToolUse hook for Claude Code, Cursor and Codex.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/12ziyad/agentwing.git",
+    "directory": "packages/hook"
+  },
+  "keywords": ["claude-code", "cursor", "codex", "agent", "hook", "guardrails", "agentwing"],
+  "engines": { "node": ">=18" },
+  "files": ["dist", "README.md"],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": { "agentwing-hook": "./dist/cli.js" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "devDependencies": { "tsup": "^8.5.0", "typescript": "^5" }
+}
