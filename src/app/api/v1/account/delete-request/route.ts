@@ -1,45 +1,74 @@
-import { requestAccountDeletion, trackEvent } from "@/lib/agentwingStore";
-import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
+import {
+  deleteAllSessionsForUser,
+  requestAccountDeletion,
+  revokeAllApiKeys,
+  trackEvent,
+} from "@/lib/agentwingStore";
+import { authRequiredResponse, clearCookie, getDashboardAuth, SESSION_COOKIE_NAME } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+/**
+ * Request account deletion.
+ *
+ * Deletion used to set two status flags and nothing else — sessions stayed
+ * valid, API keys kept authenticating, and every row remained readable. The
+ * request had no observable effect, while the UI said "permanently delete …
+ * this cannot be undone".
+ *
+ * Access is now withdrawn immediately and irreversibly: every API key for the
+ * workspace is revoked and every session for the user is destroyed, so nothing
+ * belonging to the account can act after this call returns. The rows are marked
+ * for erasure and removed by an operator, which is the part that still requires
+ * a human — so that is what the response and the UI now say.
+ */
 export async function POST(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
-  if (auth.mode !== "user") {
-    return Response.json(
-      { error: "Google account session required." },
-      { status: 403 },
-    );
-  }
+  const { userId } = auth.user;
+  const { workspaceId } = auth;
 
   try {
-    const result = await requestAccountDeletion(auth.user.userId, auth.workspace.workspaceId);
+    const result = await requestAccountDeletion(userId, workspaceId);
+
+    // Withdraw access first. If the sweep below fails, the account is already
+    // unable to act, which is the property that actually matters.
+    const [keysRevoked, sessionsDestroyed] = await Promise.all([
+      revokeAllApiKeys(workspaceId),
+      deleteAllSessionsForUser(userId),
+    ]);
+
     await trackEvent("account_deletion_requested", {
-      workspaceId: auth.workspace.workspaceId,
-      userId: auth.user.userId,
+      workspaceId,
+      userId,
       metadata: {
-        workspaceId: auth.workspace.workspaceId,
         deleteRequestedAt: result.deleteRequestedAt,
-        reviewRequired: true,
+        keysRevoked,
+        sessionsDestroyed,
       },
     });
 
-    return Response.json({
-      ok: true,
-      message: "Your account deletion request has been recorded.",
-    });
+    return Response.json(
+      {
+        ok: true,
+        keysRevoked,
+        sessionsDestroyed,
+        message:
+          "Access has been withdrawn. Every API key for this workspace is revoked and every session is signed out. " +
+          "Stored data is scheduled for erasure and is removed by an operator.",
+      },
+      { headers: { "set-cookie": clearCookie(SESSION_COOKIE_NAME) } },
+    );
   } catch {
     await trackEvent("account_deletion_requested", {
-      workspaceId: auth.workspace.workspaceId,
-      userId: auth.user.userId,
+      workspaceId,
+      userId,
       status: "error",
-      metadata: { reviewRequired: true },
     });
 
     return Response.json(
-      { error: "Unable to record account deletion request right now." },
+      { error: "Unable to record the deletion request right now.", code: "deletion_request_failed" },
       { status: 500 },
     );
   }

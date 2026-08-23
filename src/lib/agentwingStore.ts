@@ -983,10 +983,18 @@ export async function getUserSession(tokenHash: string): Promise<DashboardAuthCo
       if (!row || Date.parse(row.expires_at) <= Date.now()) return undefined;
 
       const userRow = await db
-        .prepare("SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE user_id = ?")
+        .prepare(
+          `SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at, status
+           FROM users WHERE user_id = ?`,
+        )
         .bind(row.user_id)
-        .first<UserRow>();
+        .first<UserRow & { status?: string | null }>();
       if (!userRow) return undefined;
+
+      // An account that has requested deletion cannot keep signing in. Without
+      // this, "delete my account" left every existing session working, so the
+      // request had no observable effect at all.
+      if (userRow.status && userRow.status !== "active") return undefined;
 
       const workspaceRow = await db
         .prepare(
@@ -2868,15 +2876,34 @@ export async function matchCustomPolicy(
 }
 
 export async function revokeAllApiKeys(workspaceId: string): Promise<number> {
+  requireWorkspace(workspaceId, "revokeAllApiKeys");
   const db = await getDb();
   if (!db) return 0;
   try {
-    await db
-      .prepare("UPDATE api_keys SET revoked_at = ? WHERE workspace_id = ? AND revoked_at IS NULL AND disabled_at IS NULL AND api_key != ?")
+    const result = await db
+      .prepare(
+        `UPDATE api_keys SET revoked_at = ?
+         WHERE workspace_id = ? AND revoked_at IS NULL AND disabled_at IS NULL AND api_key != ?`,
+      )
       .bind(nowIso(), workspaceId, DEMO_API_KEY)
       .run();
-    return 1;
-  } catch {
+    // The count of keys actually revoked, not a hardcoded 1.
+    return result.meta?.changes ?? 0;
+  } catch (error) {
+    warnD1Fallback("revokeAllApiKeys", error);
+    return 0;
+  }
+}
+
+/** Invalidate every session belonging to a user, immediately. */
+export async function deleteAllSessionsForUser(userId: string): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  try {
+    const result = await db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
+    return result.meta?.changes ?? 0;
+  } catch (error) {
+    warnD1Fallback("deleteAllSessionsForUser", error);
     return 0;
   }
 }

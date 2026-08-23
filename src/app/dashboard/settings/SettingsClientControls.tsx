@@ -72,7 +72,7 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
       <div className="rounded-md border border-red-300/20 bg-red-400/[0.04] p-4">
         <p className="text-sm font-semibold text-red-100">Delete account</p>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-          Permanently delete your workspace, API keys, runs, receipts, and settings. This cannot be undone.
+          Immediately revokes every API key in this workspace and signs out every session, then schedules your workspace, runs, receipts and settings for erasure. Access is withdrawn straight away and cannot be restored.
         </p>
 
         <button
@@ -95,7 +95,7 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
           <div className="w-full max-w-lg rounded-md border border-red-300/25 bg-[#080b12] p-6 shadow-2xl">
             <p className="text-lg font-semibold text-red-100">Confirm account deletion</p>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              This records an irreversible deletion request for your account and workspace. Type DELETE to confirm.
+              Every API key in this workspace will be revoked and every session signed out immediately — including this one. Your stored data is then scheduled for erasure. This cannot be undone. Type DELETE to confirm.
             </p>
 
             <label htmlFor="delete-confirmation" className="mt-5 block text-xs font-medium text-slate-400">
@@ -129,7 +129,7 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
                 onClick={requestDeletion}
                 className="rounded-md border border-red-300/30 bg-red-400/[0.14] px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-400/[0.2] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {busy ? "Deleting..." : "Delete permanently"}
+                {busy ? "Revoking access…" : "Delete account"}
               </button>
             </div>
           </div>
