@@ -772,7 +772,25 @@ function warnD1Fallback(area: string, error: unknown) {
   console.warn(`[AgentWing] D1 unavailable for ${area}; using local dev fallback. ${message}`);
 }
 
+/**
+ * Seed the local demo tenant.
+ *
+ * This performs four INSERT OR IGNORE writes and was awaited at fifteen call
+ * sites, including inside validateApiKeyFromRequest -- so every authenticated
+ * request, in every environment, paid four extra D1 writes to maintain a demo
+ * tenant that production must never accept anyway. D1 executes queries
+ * sequentially per database, so those writes were consuming the throughput
+ * budget of every real request.
+ *
+ * It is now a no-op wherever the demo key is not accepted, and runs at most
+ * once per isolate rather than once per request.
+ */
+let demoSeeded = false;
+
 async function ensureD1DemoKey(db: AgentWingD1Database) {
+  if (!demoKeyEnabled() || demoSeeded) return;
+  demoSeeded = true;
+
   const hash = await sha256(DEMO_API_KEY);
 
   await db
@@ -2135,9 +2153,58 @@ export async function rejectActionRun(
   );
 }
 
+/**
+ * Counters for the dashboard.
+ *
+ * Counted in SQL rather than in JavaScript. This used to SELECT 500 complete
+ * rows -- including action_json, stdout, stderr and execution_logs_json -- and
+ * filter them in memory to produce six integers. On a workspace with real
+ * traffic that moved megabytes across the wire to compute numbers the database
+ * can produce directly, and it silently capped at 500 so the totals were wrong
+ * for anyone busy enough to care about them.
+ */
 export async function getActionRunStats(workspaceId: string): Promise<ActionRunStats> {
   requireWorkspace(workspaceId, "getActionRunStats");
-  const runs = await listActionRuns(workspaceId, undefined, 500);
+  const db = await getDb();
+
+  if (db) {
+    try {
+      const row = await db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             COALESCE(SUM(status = 'completed'), 0) AS completed,
+             COALESCE(SUM(status = 'blocked'), 0) AS blocked,
+             COALESCE(SUM(status = 'waiting_approval'), 0) AS waiting_approval,
+             COALESCE(SUM(execution_target = 'sandbox'), 0) AS sandbox_runs,
+             COALESCE(SUM(status = 'external_runner_required'), 0) AS external_runner_required
+           FROM action_runs
+           WHERE workspace_id = ?`,
+        )
+        .bind(workspaceId)
+        .first<{
+          total: number;
+          completed: number;
+          blocked: number;
+          waiting_approval: number;
+          sandbox_runs: number;
+          external_runner_required: number;
+        }>();
+
+      return {
+        total: Number(row?.total ?? 0),
+        completed: Number(row?.completed ?? 0),
+        blocked: Number(row?.blocked ?? 0),
+        waitingApproval: Number(row?.waiting_approval ?? 0),
+        sandboxRuns: Number(row?.sandbox_runs ?? 0),
+        externalRunnerRequired: Number(row?.external_runner_required ?? 0),
+      };
+    } catch (error) {
+      warnD1Fallback("getActionRunStats", error);
+    }
+  }
+
+  const runs = getState().actionRuns.filter((run) => run.workspaceId === workspaceId);
   return {
     total: runs.length,
     completed: runs.filter((run) => run.status === "completed").length,
@@ -2153,13 +2220,29 @@ export async function getReceiptStats(workspaceId: string): Promise<ReceiptStats
   const db = await getDb();
   if (db) {
     try {
-      const receipts = await listReceipts(workspaceId);
+      // Counted in SQL. This used to list up to 500 whole receipt rows and
+      // filter them in memory, which both moved far more data than necessary
+      // and reported a total that was silently capped at 500.
+      const row = await db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             COALESCE(SUM(decision = 'block'), 0) AS blocked,
+             COALESCE(SUM(decision = 'approval_required'), 0) AS approval_required,
+             COALESCE(SUM(decision = 'sandbox_required'), 0) AS sandbox_required
+           FROM receipts
+           WHERE workspace_id = ?`,
+        )
+        .bind(workspaceId)
+        .first<{ total: number; blocked: number; approval_required: number; sandbox_required: number }>();
+
+      const total = Number(row?.total ?? 0);
       return {
-        total: receipts.length,
-        blocked: receipts.filter((receipt) => receipt.decision === "block").length,
-        approvalRequired: receipts.filter((receipt) => receipt.decision === "approval_required").length,
-        sandboxRequired: receipts.filter((receipt) => receipt.decision === "sandbox_required").length,
-        receiptsCreated: receipts.length,
+        total,
+        blocked: Number(row?.blocked ?? 0),
+        approvalRequired: Number(row?.approval_required ?? 0),
+        sandboxRequired: Number(row?.sandbox_required ?? 0),
+        receiptsCreated: total,
       };
     } catch (error) {
       warnD1Fallback("getReceiptStats", error);
@@ -2167,7 +2250,7 @@ export async function getReceiptStats(workspaceId: string): Promise<ReceiptStats
     }
   }
 
-  const receipts = getState().receipts.filter((receipt) => !workspaceId || receipt.workspaceId === workspaceId);
+  const receipts = getState().receipts.filter((receipt) => receipt.workspaceId === workspaceId);
   return {
     total: receipts.length,
     blocked: receipts.filter((receipt) => receipt.decision === "block").length,
