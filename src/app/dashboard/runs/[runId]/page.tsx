@@ -48,7 +48,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ runI
   const run = await getActionRun(runId, workspaceId);
   if (!run) notFound();
 
-  const events = await listExecutionEvents(run.runId);
+  const events = await listExecutionEvents(run.runId, workspaceId);
   const summary = run.action.command || run.action.target || run.action.description || run.action.actionType;
 
   return (

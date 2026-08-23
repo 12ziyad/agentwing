@@ -2,6 +2,7 @@ import { approveRunAndContinue } from "@/lib/actionRunLifecycle";
 import { trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,7 @@ function reasonFromBody(body: unknown) {
     : undefined;
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ runId: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ runId: string }> }) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -42,3 +43,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ run
 
   return Response.json({ run });
 }
+
+export const POST = withRoute("v1/action-runs/[runId]/approve", handlePOST);

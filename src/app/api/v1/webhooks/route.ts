@@ -4,6 +4,7 @@ import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac
 import { createWebhookEndpoint, listWebhookEndpoints } from "@/lib/webhookStore";
 import { assertDeliverableUrl, isWebhookEventType, WEBHOOK_EVENT_TYPES, WebhookUrlError } from "@/lib/webhooks";
 import type { WebhookEventType } from "@/lib/webhooks";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ function unavailable() {
   );
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
   });
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -85,3 +86,7 @@ export async function POST(request: Request) {
     { status: 201 },
   );
 }
+
+export const GET = withRoute("v1/webhooks", handleGET);
+
+export const POST = withRoute("v1/webhooks", handlePOST);

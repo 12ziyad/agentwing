@@ -24,31 +24,6 @@ import type {
   SandboxTestStatus,
 } from "./agentwingTypes";
 
-type SandboxConfig = SandboxProviderConfig & {
-  e2bApiKey?: string;
-};
-
-type ApiKeyInternal = AgentWingApiKeyRecord & {
-  keyHash?: string;
-  rawKey?: string;
-};
-
-type StoreState = {
-  receipts: ActionReceipt[];
-  actionRuns: ActionRun[];
-  executionEvents: ExecutionEvent[];
-  runnerApprovalTokens: RunnerApprovalTokenRecord[];
-  sandbox: SandboxConfig;
-  usageByApiKey: Record<string, ApiKeyUsage>;
-  projects: AgentWingProject[];
-  apiKeysById: Record<string, ApiKeyInternal>;
-  rawApiKeyToId: Record<string, string>;
-  usersById: Record<string, AgentWingUser>;
-  workspacesById: Record<string, AgentWingWorkspace>;
-  userWorkspaceIds: Record<string, string>;
-  sessionsByTokenHash: Record<string, { sessionId: string; userId: string; tokenHash: string; expiresAt: string; createdAt: string }>;
-};
-
 type RunnerApprovalTokenRecord = {
   tokenId: string;
   runId: string;
@@ -248,7 +223,6 @@ type SessionRow = {
   created_at: string;
 };
 
-const STORE_SYMBOL = Symbol.for("agentwing.dev.store");
 export const DEMO_API_KEY = "aw_live_demo_key";
 const BETA_ACTION_CHECK_LIMIT = 1000;
 const BETA_SANDBOX_RUN_LIMIT = 20;
@@ -262,11 +236,30 @@ const DEMO_WORKSPACE_ID = "workspace_demo";
  * refuse the request rather than fall through to default rules, because a
  * workspace's BLOCK rules may be exactly what could not be loaded.
  */
+/**
+ * Storage is unreachable.
+ *
+ * Distinct from "no rows": callers must refuse the request rather than answer
+ * from nothing, because an empty answer is indistinguishable from a real one.
+ */
+export class DatabaseUnavailableError extends Error {
+  readonly code = "database_unavailable";
+  readonly status = 503;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "DatabaseUnavailableError";
+  }
+}
+
 export class PolicyStoreUnavailableError extends Error {
   readonly code = "policy_store_unavailable";
   readonly status = 503;
 
-  constructor(message: string, readonly cause?: unknown) {
+  constructor(
+    message: string,
+    readonly cause?: unknown,
+  ) {
     super(message);
     this.name = "PolicyStoreUnavailableError";
   }
@@ -282,7 +275,10 @@ export class PolicyStoreUnavailableError extends Error {
  * predicate returns every tenant's rows, and failing loudly is the only safe
  * behaviour for that class of mistake.
  */
-function requireWorkspace(workspaceId: string | undefined, operation: string): asserts workspaceId is string {
+function requireWorkspace(
+  workspaceId: string | undefined,
+  operation: string,
+): asserts workspaceId is string {
   if (typeof workspaceId === "string" && workspaceId.length > 0) return;
   throw new Error(
     `${operation} was called without a workspace id. Tenant data can only be accessed within a workspace scope.`,
@@ -301,10 +297,6 @@ export function demoKeyEnabled() {
   return process.env.NODE_ENV !== "production";
 }
 
-type GlobalWithStore = typeof globalThis & {
-  [STORE_SYMBOL]?: StoreState;
-};
-
 function createDefaultUsage(apiKeyId: string): ApiKeyUsage {
   return {
     apiKey: apiKeyId,
@@ -319,56 +311,6 @@ function createDefaultUsage(apiKeyId: string): ApiKeyUsage {
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function getState(): StoreState {
-  const globalStore = globalThis as GlobalWithStore;
-  if (!globalStore[STORE_SYMBOL]) {
-    globalStore[STORE_SYMBOL] = {
-      receipts: [],
-      actionRuns: [],
-      executionEvents: [],
-      runnerApprovalTokens: [],
-      sandbox: {
-        provider: "e2b-byok",
-        connected: false,
-        mode: "none",
-        byok: true,
-        sandboxMode: "none",
-        runtimeExecutionEnabled: false,
-        e2bKeySaved: false,
-      },
-      usageByApiKey: {
-        [DEMO_API_KEY]: createDefaultUsage(DEMO_API_KEY),
-      },
-      projects: [
-        {
-          projectId: DEMO_PROJECT_ID,
-          name: "Runtime Lab Demo",
-          createdAt: nowIso(),
-        },
-      ],
-      apiKeysById: {
-        [DEMO_API_KEY]: {
-          apiKeyId: DEMO_API_KEY,
-          keyPrefix: DEMO_API_KEY,
-          planName: "Beta",
-          actionCheckLimit: BETA_ACTION_CHECK_LIMIT,
-          sandboxRunLimit: BETA_SANDBOX_RUN_LIMIT,
-          createdAt: nowIso(),
-          rawKey: DEMO_API_KEY,
-        },
-      },
-      rawApiKeyToId: {
-        [DEMO_API_KEY]: DEMO_API_KEY,
-      },
-      usersById: {},
-      workspacesById: {},
-      userWorkspaceIds: {},
-      sessionsByTokenHash: {},
-    };
-  }
-  return globalStore[STORE_SYMBOL];
 }
 
 function publicUsage(usage: ApiKeyUsage): ApiKeyUsage {
@@ -393,31 +335,49 @@ export function createAgentWingId(prefix: string) {
 function randomToken(bytesLength = 24) {
   const bytes = new Uint8Array(bytesLength);
   globalThis.crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 async function sha256(value: string) {
   const data = new TextEncoder().encode(value);
   const digest = await globalThis.crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 async function importSandboxCryptoKey() {
-  const configuredSecret = process.env.AGENTWING_SANDBOX_SECRET ?? process.env.AGENTWING_SECRET_KEY;
+  const configuredSecret =
+    process.env.AGENTWING_SANDBOX_SECRET ?? process.env.AGENTWING_SECRET_KEY;
   const secret =
     configuredSecret ||
-    (process.env.NODE_ENV === "production" ? undefined : "agentwing-dev-only-sandbox-secret");
+    (process.env.NODE_ENV === "production"
+      ? undefined
+      : "agentwing-dev-only-sandbox-secret");
 
   if (!secret) {
-    throw new Error("Set AGENTWING_SANDBOX_SECRET to store usable BYOK sandbox credentials in D1.");
+    throw new Error(
+      "Set AGENTWING_SANDBOX_SECRET to store usable BYOK sandbox credentials in D1.",
+    );
   }
 
   if (!configuredSecret && process.env.NODE_ENV !== "production") {
-    warnD1Fallback("sandbox-secret-dev-key", new Error("Using dev-only sandbox encryption key."));
+    warnD1Fallback(
+      "sandbox-secret-dev-key",
+      new Error("Using dev-only sandbox encryption key."),
+    );
   }
 
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
-  return globalThis.crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(secret),
+  );
+  return globalThis.crypto.subtle.importKey("raw", digest, "AES-GCM", false, [
+    "encrypt",
+    "decrypt",
+  ]);
 }
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -469,7 +429,11 @@ function redact(value: unknown): unknown {
 
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
-      if (/secret|token|password|authorization|api[_-]?key|private[_-]?key/i.test(key)) {
+      if (
+        /secret|token|password|authorization|api[_-]?key|private[_-]?key/i.test(
+          key,
+        )
+      ) {
         return [key, "[redacted]"];
       }
       return [key, redact(entry)];
@@ -511,17 +475,21 @@ function parseJsonObject(value?: string | null): Record<string, unknown> {
   if (!value) return {};
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
   } catch {
     return {};
   }
 }
 
-function parseExecutionEvents(value?: string | null): ExecutionEvent[] | undefined {
+function parseExecutionEvents(
+  value?: string | null,
+): ExecutionEvent[] | undefined {
   if (!value) return undefined;
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed as ExecutionEvent[] : undefined;
+    return Array.isArray(parsed) ? (parsed as ExecutionEvent[]) : undefined;
   } catch {
     return undefined;
   }
@@ -543,7 +511,10 @@ function mapActionRunRow(row: ActionRunRow): ActionRun {
   try {
     action = JSON.parse(row.action_json) as AgentAction;
   } catch {
-    action = { actionType: "custom_action", description: "Unable to parse stored action JSON." };
+    action = {
+      actionType: "custom_action",
+      description: "Unable to parse stored action JSON.",
+    };
   }
 
   return {
@@ -576,7 +547,9 @@ function mapActionRunRow(row: ActionRunRow): ActionRun {
   };
 }
 
-function mapRunnerApprovalTokenRow(row: RunnerApprovalTokenRow): RunnerApprovalTokenRecord {
+function mapRunnerApprovalTokenRow(
+  row: RunnerApprovalTokenRow,
+): RunnerApprovalTokenRecord {
   return {
     tokenId: row.token_id,
     runId: row.run_id,
@@ -626,7 +599,9 @@ function mapApiKeyRow(row: ApiKeyRow): AgentWingApiKeyRecord {
   };
 }
 
-function mapCustomPolicyRow(row: CustomPolicyRow): import("./agentwingTypes").CustomPolicy {
+function mapCustomPolicyRow(
+  row: CustomPolicyRow,
+): import("./agentwingTypes").CustomPolicy {
   return {
     policyId: row.policy_id,
     workspaceId: row.workspace_id,
@@ -686,7 +661,10 @@ function normalizeStoredE2BKey(apiKey: string) {
     /^x-api-key\s*=\s*/i,
     /^e2b_api_key\s*=\s*/i,
   ]) {
-    normalized = normalized.replace(pattern, "").trim().replace(/^['"]|['"]$/g, "");
+    normalized = normalized
+      .replace(pattern, "")
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
   }
 
   return normalized;
@@ -700,7 +678,9 @@ function isPlaceholderE2BKey(apiKey: string) {
   return /^(paste_your_|e2b_your_key_here|your_e2b_api_key)/i.test(apiKey);
 }
 
-function publicSandboxConfig(row?: Partial<SandboxRow> | null): SandboxProviderConfig {
+function publicSandboxConfig(
+  row?: Partial<SandboxRow> | null,
+): SandboxProviderConfig {
   const connected = Boolean(row?.e2b_key_saved && row.mode === "e2b_byok");
   const lastTestStatus =
     row?.last_test_status === "success" || row?.last_test_status === "failed"
@@ -732,27 +712,50 @@ export function sandboxOwnerKeyForWorkspace(workspaceId?: string) {
 }
 
 function workspaceIdFromSandboxOwner(ownerApiKeyId: string) {
-  return ownerApiKeyId.startsWith("workspace:") ? ownerApiKeyId.slice("workspace:".length) : undefined;
+  return ownerApiKeyId.startsWith("workspace:")
+    ? ownerApiKeyId.slice("workspace:".length)
+    : undefined;
 }
 
 function workspaceNameFromEmail(email: string) {
-  const localPart = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  const localPart = email
+    .split("@")[0]
+    ?.replace(/[._-]+/g, " ")
+    .trim();
   if (!localPart) return "My Workspace";
   return `${localPart.replace(/\b\w/g, (char) => char.toUpperCase())} Workspace`;
 }
 
-async function getDb() {
+/**
+ * The database. Never optional.
+ *
+ * This used to return `undefined` outside production, which is what the
+ * in-memory mirror existed to cover. It does not need covering:
+ * `initOpenNextCloudflareForDev()` supplies the D1 binding under `next dev`,
+ * and `wrangler dev` supplies it too — verified by the health endpoint's D1
+ * probe succeeding in both.
+ *
+ * Returning a non-optional database is what lets every store function have one
+ * code path instead of two. The mirror was not a dev convenience: four
+ * functions wrote to it unconditionally after a successful D1 write with no
+ * environment guard, and three read paths merged it back into query results.
+ * On Workers that global is per-isolate, so the same query returned different
+ * answers depending on which isolate served it.
+ */
+async function getDb(): Promise<AgentWingD1Database> {
   const db = await getAgentWingD1();
   if (!db) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("AGENTWING_DB binding is required in production.");
-    }
-    warnD1Fallback("missing-binding", new Error("AGENTWING_DB binding unavailable"));
+    throw new DatabaseUnavailableError(
+      "The AGENTWING_DB binding is unavailable. AgentWing cannot serve requests without its database.",
+    );
   }
   return db;
 }
 
-async function getD1TableColumns(db: AgentWingD1Database, tableName: "users" | "workspaces" | "receipts") {
+async function getD1TableColumns(
+  db: AgentWingD1Database,
+  tableName: "users" | "workspaces" | "receipts",
+) {
   try {
     const result = await db
       .prepare(`PRAGMA table_info(${tableName})`)
@@ -763,16 +766,30 @@ async function getD1TableColumns(db: AgentWingD1Database, tableName: "users" | "
   }
 }
 
-const fallbackWarnings = new Set<string>();
+const loggedAreas = new Set<string>();
 
+/**
+ * Log a non-fatal storage failure.
+ *
+ * Every remaining caller is a genuinely best-effort path -- a webhook queue, an
+ * audit event, a chain append -- where the primary work is already durable and
+ * failing the request would be the worse outcome. Anything the caller depends
+ * on now propagates instead.
+ *
+ * Deduplicated per area so one broken subsystem cannot flood the log and hide
+ * everything else.
+ */
 function warnD1Fallback(area: string, error: unknown) {
-  if (process.env.NODE_ENV === "production") {
-    throw error instanceof Error ? error : new Error("D1 unavailable in production.");
-  }
-  if (fallbackWarnings.has(area)) return;
-  fallbackWarnings.add(area);
-  const message = error instanceof Error ? error.message : "Unknown D1 error";
-  console.warn(`[AgentWing] D1 unavailable for ${area}; using local dev fallback. ${message}`);
+  if (loggedAreas.has(area)) return;
+  loggedAreas.add(area);
+  console.warn(
+    JSON.stringify({
+      level: "warn",
+      msg: "storage_operation_failed",
+      area,
+      error: error instanceof Error ? error.name : "unknown",
+    }),
+  );
 }
 
 /**
@@ -797,7 +814,9 @@ async function ensureD1DemoKey(db: AgentWingD1Database) {
   const hash = await sha256(DEMO_API_KEY);
 
   await db
-    .prepare("INSERT OR IGNORE INTO projects (project_id, name, created_at) VALUES (?, ?, ?)")
+    .prepare(
+      "INSERT OR IGNORE INTO projects (project_id, name, created_at) VALUES (?, ?, ?)",
+    )
     .bind(DEMO_PROJECT_ID, "Runtime Lab Demo", nowIso())
     .run();
 
@@ -828,7 +847,9 @@ async function ensureD1DemoKey(db: AgentWingD1Database) {
     .run();
 
   await db
-    .prepare("INSERT OR IGNORE INTO sandbox_configs (api_key, mode, e2b_key_saved) VALUES (?, 'none', 0)")
+    .prepare(
+      "INSERT OR IGNORE INTO sandbox_configs (api_key, mode, e2b_key_saved) VALUES (?, 'none', 0)",
+    )
     .bind(DEMO_API_KEY)
     .run();
 }
@@ -840,121 +861,110 @@ export async function upsertGoogleUserAndWorkspace(profile: {
   image?: string;
 }): Promise<{ user: AgentWingUser; workspace: AgentWingWorkspace }> {
   const email = profile.email.trim().toLowerCase();
-  if (!email) throw new Error("Google profile did not include an email address.");
+  if (!email)
+    throw new Error("Google profile did not include an email address.");
 
   const now = nowIso();
   const db = await getDb();
-  if (db) {
-    try {
-      // Identity is keyed on (provider, subject) and nothing else.
-      //
-      // This used to fall back to matching by EMAIL and then overwrite
-      // provider_account_id with the new subject. Anyone who could obtain a
-      // token for a matching address took over the account outright, and the
-      // legitimate owner was locked out of their own -- an email address is not
-      // an identity, it is an attribute an IdP may or may not have verified.
-      const userRow = await db
-        .prepare(
-          `SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at
-           FROM users WHERE provider = 'google' AND provider_account_id = ?`,
-        )
-        .bind(profile.providerAccountId)
-        .first<UserRow>();
+  // Identity is keyed on (provider, subject) and nothing else.
+  //
+  // This used to fall back to matching by EMAIL and then overwrite
+  // provider_account_id with the new subject. Anyone who could obtain a
+  // token for a matching address took over the account outright, and the
+  // legitimate owner was locked out of their own -- an email address is not
+  // an identity, it is an attribute an IdP may or may not have verified.
+  const userRow = await db
+    .prepare(
+      `SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at
+         FROM users WHERE provider = 'google' AND provider_account_id = ?`,
+    )
+    .bind(profile.providerAccountId)
+    .first<UserRow>();
 
-      const userId = userRow?.user_id ?? randomId("user");
-      if (userRow) {
-        // The subject already matched, so provider_account_id is not rewritten
-        // here -- only the mutable profile fields are.
-        await db
-          .prepare(
-            `UPDATE users
-             SET email = ?, name = ?, image = ?, last_login_at = ?
-             WHERE user_id = ?`,
-          )
-          .bind(email, profile.name ?? null, profile.image ?? null, now, userId)
-          .run();
-      } else {
-        await db
-          .prepare(
-            `INSERT INTO users
-             (user_id, email, name, image, provider, provider_account_id, created_at, last_login_at)
-             VALUES (?, ?, ?, ?, 'google', ?, ?, ?)`,
-          )
-          .bind(userId, email, profile.name ?? null, profile.image ?? null, profile.providerAccountId, now, now)
-          .run();
-      }
-
-      const user = mapUserRow(
-        (await db
-          .prepare("SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE user_id = ?")
-          .bind(userId)
-          .first<UserRow>())!,
-      );
-
-      let workspaceRow = await db
-        .prepare("SELECT workspace_id, name, owner_user_id, created_at FROM workspaces WHERE owner_user_id = ? ORDER BY created_at ASC LIMIT 1")
-        .bind(user.userId)
-        .first<WorkspaceRow>();
-
-      if (!workspaceRow) {
-        const workspaceId = randomId("ws");
-        await db
-          .prepare("INSERT INTO workspaces (workspace_id, name, owner_user_id, created_at) VALUES (?, ?, ?, ?)")
-          .bind(workspaceId, workspaceNameFromEmail(email), user.userId, now)
-          .run();
-        await db
-          .prepare("INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)")
-          .bind(workspaceId, user.userId, now)
-          .run();
-        workspaceRow = (await db
-          .prepare("SELECT workspace_id, name, owner_user_id, created_at FROM workspaces WHERE workspace_id = ?")
-          .bind(workspaceId)
-          .first<WorkspaceRow>())!;
-      } else {
-        await db
-          .prepare("INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)")
-          .bind(workspaceRow.workspace_id, user.userId, now)
-          .run();
-      }
-
-      return { user, workspace: mapWorkspaceRow(workspaceRow) };
-    } catch (error) {
-      warnD1Fallback("upsertGoogleUserAndWorkspace", error);
-    }
+  const userId = userRow?.user_id ?? randomId("user");
+  if (userRow) {
+    // The subject already matched, so provider_account_id is not rewritten
+    // here -- only the mutable profile fields are.
+    await db
+      .prepare(
+        `UPDATE users
+           SET email = ?, name = ?, image = ?, last_login_at = ?
+           WHERE user_id = ?`,
+      )
+      .bind(email, profile.name ?? null, profile.image ?? null, now, userId)
+      .run();
+  } else {
+    await db
+      .prepare(
+        `INSERT INTO users
+           (user_id, email, name, image, provider, provider_account_id, created_at, last_login_at)
+           VALUES (?, ?, ?, ?, 'google', ?, ?, ?)`,
+      )
+      .bind(
+        userId,
+        email,
+        profile.name ?? null,
+        profile.image ?? null,
+        profile.providerAccountId,
+        now,
+        now,
+      )
+      .run();
   }
 
-  const state = getState();
-  const existingUser = Object.values(state.usersById).find(
-    (user) => user.provider === "google" && user.providerAccountId === profile.providerAccountId,
+  const user = mapUserRow(
+    (await db
+      .prepare(
+        "SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE user_id = ?",
+      )
+      .bind(userId)
+      .first<UserRow>())!,
   );
-  const user: AgentWingUser = {
-    userId: existingUser?.userId ?? randomId("user"),
-    email,
-    name: profile.name,
-    image: profile.image,
-    provider: "google",
-    providerAccountId: profile.providerAccountId,
-    createdAt: existingUser?.createdAt ?? now,
-    lastLoginAt: now,
-  };
-  state.usersById[user.userId] = user;
 
-  const existingWorkspaceId = state.userWorkspaceIds[user.userId];
-  const workspace: AgentWingWorkspace = existingWorkspaceId
-    ? state.workspacesById[existingWorkspaceId]
-    : {
-        workspaceId: randomId("ws"),
-        name: workspaceNameFromEmail(email),
-        ownerUserId: user.userId,
-        createdAt: now,
-      };
-  state.workspacesById[workspace.workspaceId] = workspace;
-  state.userWorkspaceIds[user.userId] = workspace.workspaceId;
+  let workspaceRow = await db
+    .prepare(
+      "SELECT workspace_id, name, owner_user_id, created_at FROM workspaces WHERE owner_user_id = ? ORDER BY created_at ASC LIMIT 1",
+    )
+    .bind(user.userId)
+    .first<WorkspaceRow>();
 
-  return { user, workspace };
+  if (!workspaceRow) {
+    const workspaceId = randomId("ws");
+    await db
+      .prepare(
+        "INSERT INTO workspaces (workspace_id, name, owner_user_id, created_at) VALUES (?, ?, ?, ?)",
+      )
+      .bind(workspaceId, workspaceNameFromEmail(email), user.userId, now)
+      .run();
+    await db
+      .prepare(
+        "INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)",
+      )
+      .bind(workspaceId, user.userId, now)
+      .run();
+    workspaceRow = (await db
+      .prepare(
+        "SELECT workspace_id, name, owner_user_id, created_at FROM workspaces WHERE workspace_id = ?",
+      )
+      .bind(workspaceId)
+      .first<WorkspaceRow>())!;
+  } else {
+    await db
+      .prepare(
+        "INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)",
+      )
+      .bind(workspaceRow.workspace_id, user.userId, now)
+      .run();
+  }
+
+  return { user, workspace: mapWorkspaceRow(workspaceRow) };
 }
 
-export async function createUserSession(userId: string, tokenHash: string, expiresAt: string) {
+export async function createUserSession(
+  userId: string,
+  tokenHash: string,
+  expiresAt: string,
+) {
   const session = {
     sessionId: randomId("sess"),
     userId,
@@ -964,94 +974,84 @@ export async function createUserSession(userId: string, tokenHash: string, expir
   };
 
   const db = await getDb();
-  if (db) {
-    try {
-      await db
-        .prepare("INSERT INTO sessions (session_id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
-        .bind(session.sessionId, session.userId, session.tokenHash, session.expiresAt, session.createdAt)
-        .run();
-      return session;
-    } catch (error) {
-      warnD1Fallback("createUserSession", error);
-    }
-  }
-
-  getState().sessionsByTokenHash[tokenHash] = session;
+  await db
+    .prepare(
+      "INSERT INTO sessions (session_id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(
+      session.sessionId,
+      session.userId,
+      session.tokenHash,
+      session.expiresAt,
+      session.createdAt,
+    )
+    .run();
   return session;
 }
 
-export async function getUserSession(tokenHash: string): Promise<DashboardAuthContext | undefined> {
+export async function getUserSession(
+  tokenHash: string,
+): Promise<DashboardAuthContext | undefined> {
   const db = await getDb();
-  if (db) {
-    try {
-      const row = await db
-        .prepare("SELECT session_id, user_id, token_hash, expires_at, created_at FROM sessions WHERE token_hash = ?")
-        .bind(tokenHash)
-        .first<SessionRow>();
-      if (!row || Date.parse(row.expires_at) <= Date.now()) return undefined;
+  const row = await db
+    .prepare(
+      "SELECT session_id, user_id, token_hash, expires_at, created_at FROM sessions WHERE token_hash = ?",
+    )
+    .bind(tokenHash)
+    .first<SessionRow>();
+  if (!row || Date.parse(row.expires_at) <= Date.now()) return undefined;
 
-      const userRow = await db
-        .prepare(
-          `SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at, status
-           FROM users WHERE user_id = ?`,
-        )
-        .bind(row.user_id)
-        .first<UserRow & { status?: string | null }>();
-      if (!userRow) return undefined;
+  const userRow = await db
+    .prepare(
+      `SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at, status
+         FROM users WHERE user_id = ?`,
+    )
+    .bind(row.user_id)
+    .first<UserRow & { status?: string | null }>();
+  if (!userRow) return undefined;
 
-      // An account that has requested deletion cannot keep signing in. Without
-      // this, "delete my account" left every existing session working, so the
-      // request had no observable effect at all.
-      if (userRow.status && userRow.status !== "active") return undefined;
+  // An account that has requested deletion cannot keep signing in. Without
+  // this, "delete my account" left every existing session working, so the
+  // request had no observable effect at all.
+  if (userRow.status && userRow.status !== "active") return undefined;
 
-      const workspaceRow = await db
-        .prepare(
-          `SELECT workspaces.workspace_id, workspaces.name, workspaces.owner_user_id, workspaces.created_at,
-                  workspace_members.role AS member_role
-           FROM workspaces
-           INNER JOIN workspace_members ON workspace_members.workspace_id = workspaces.workspace_id
-           WHERE workspace_members.user_id = ?
-           ORDER BY workspaces.created_at ASC
-           LIMIT 1`,
-        )
-        .bind(userRow.user_id)
-        .first<WorkspaceRow & { member_role?: string | null }>();
-      if (!workspaceRow) return undefined;
+  const workspaceRow = await db
+    .prepare(
+      `SELECT workspaces.workspace_id, workspaces.name, workspaces.owner_user_id, workspaces.created_at,
+                workspace_members.role AS member_role
+         FROM workspaces
+         INNER JOIN workspace_members ON workspace_members.workspace_id = workspaces.workspace_id
+         WHERE workspace_members.user_id = ?
+         ORDER BY workspaces.created_at ASC
+         LIMIT 1`,
+    )
+    .bind(userRow.user_id)
+    .first<WorkspaceRow & { member_role?: string | null }>();
+  if (!workspaceRow) return undefined;
 
-      const user = mapUserRow(userRow);
-      const workspace = mapWorkspaceRow(workspaceRow);
-      // An unrecognised role is treated as the least-privileged one. A typo in
-      // the column must not silently grant more than it names.
-      const role = isRole(workspaceRow.member_role) ? workspaceRow.member_role : DEFAULT_ROLE;
-      return { mode: "user", user, workspace, workspaceId: workspace.workspaceId, role };
-    } catch (error) {
-      warnD1Fallback("getUserSession", error);
-    }
-  }
-
-  const state = getState();
-  const session = state.sessionsByTokenHash[tokenHash];
-  if (!session || Date.parse(session.expiresAt) <= Date.now()) return undefined;
-  const user = state.usersById[session.userId];
-  const workspaceId = state.userWorkspaceIds[session.userId];
-  const workspace = workspaceId ? state.workspacesById[workspaceId] : undefined;
-  if (!user || !workspace) return undefined;
-  // The in-memory path only ever creates a workspace for its owner.
-  return { mode: "user", user, workspace, workspaceId, role: "owner" };
+  const user = mapUserRow(userRow);
+  const workspace = mapWorkspaceRow(workspaceRow);
+  // An unrecognised role is treated as the least-privileged one. A typo in
+  // the column must not silently grant more than it names.
+  const role = isRole(workspaceRow.member_role)
+    ? workspaceRow.member_role
+    : DEFAULT_ROLE;
+  return {
+    mode: "user",
+    user,
+    workspace,
+    workspaceId: workspace.workspaceId,
+    role,
+  };
 }
 
 export async function deleteUserSession(tokenHash: string) {
   const db = await getDb();
-  if (db) {
-    try {
-      await db.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(tokenHash).run();
-      return;
-    } catch (error) {
-      warnD1Fallback("deleteUserSession", error);
-    }
-  }
-
-  delete getState().sessionsByTokenHash[tokenHash];
+  await db
+    .prepare("DELETE FROM sessions WHERE token_hash = ?")
+    .bind(tokenHash)
+    .run();
+  return;
 }
 
 export function getApiKeyFromRequest(request: Request) {
@@ -1061,7 +1061,9 @@ export function getApiKeyFromRequest(request: Request) {
   return token.trim();
 }
 
-export async function validateApiKeyFromRequest(request: Request): Promise<AuthenticatedApiKey | undefined> {
+export async function validateApiKeyFromRequest(
+  request: Request,
+): Promise<AuthenticatedApiKey | undefined> {
   const rawApiKey = getApiKeyFromRequest(request);
   if (!rawApiKey) return undefined;
 
@@ -1071,76 +1073,51 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
   if (rawApiKey === DEMO_API_KEY && !demoKeyEnabled()) return undefined;
 
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
+  await ensureD1DemoKey(db);
 
-      // The demo key authenticates with no workspace, so every query it reaches
-      // would run unscoped. It must never be accepted by a deployed instance.
-      if (rawApiKey === DEMO_API_KEY) {
-        if (!demoKeyEnabled()) return undefined;
-        return {
-          apiKeyId: DEMO_API_KEY,
-          workspaceId: DEMO_WORKSPACE_ID,
-          projectId: DEMO_PROJECT_ID,
-          keyPrefix: DEMO_API_KEY,
-          isDemo: true,
-        };
-      }
-
-      const hash = await sha256(rawApiKey);
-      const row = await db
-        .prepare(
-          `SELECT api_key, api_key_id, workspace_id, project_id, key_prefix, plan_name, action_check_limit,
-                  sandbox_run_limit, created_at, last_used_at, revoked_at, disabled_at
-           FROM api_keys
-           WHERE key_hash = ? AND disabled_at IS NULL AND revoked_at IS NULL`,
-        )
-        .bind(hash)
-        .first<ApiKeyRow>();
-
-      if (!row) return undefined;
-
-      // A key must belong to exactly one workspace. Historically a NULL here
-      // produced an unscoped caller that could read every tenant's data, so it
-      // is now an authentication failure rather than a wildcard.
-      if (!row.workspace_id) return undefined;
-
-      const apiKeyId = row.api_key_id ?? row.api_key;
-      await db
-        .prepare("UPDATE api_keys SET last_used_at = ? WHERE api_key = ?")
-        .bind(nowIso(), row.api_key)
-        .run();
-
-      return {
-        apiKeyId,
-        workspaceId: row.workspace_id,
-        projectId: row.project_id ?? undefined,
-        keyPrefix: row.key_prefix ?? keyPrefix(rawApiKey),
-        isDemo: false,
-      };
-    } catch (error) {
-      warnD1Fallback("listProjects", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
+  // The demo key authenticates with no workspace, so every query it reaches
+  // would run unscoped. It must never be accepted by a deployed instance.
+  if (rawApiKey === DEMO_API_KEY) {
+    if (!demoKeyEnabled()) return undefined;
+    return {
+      apiKeyId: DEMO_API_KEY,
+      workspaceId: DEMO_WORKSPACE_ID,
+      projectId: DEMO_PROJECT_ID,
+      keyPrefix: DEMO_API_KEY,
+      isDemo: true,
+    };
   }
 
-  if (rawApiKey === DEMO_API_KEY && !demoKeyEnabled()) return undefined;
+  const hash = await sha256(rawApiKey);
+  const row = await db
+    .prepare(
+      `SELECT api_key, api_key_id, workspace_id, project_id, key_prefix, plan_name, action_check_limit,
+                sandbox_run_limit, created_at, last_used_at, revoked_at, disabled_at
+         FROM api_keys
+         WHERE key_hash = ? AND disabled_at IS NULL AND revoked_at IS NULL`,
+    )
+    .bind(hash)
+    .first<ApiKeyRow>();
 
-  const state = getState();
-  const apiKeyId = state.rawApiKeyToId[rawApiKey];
-  if (!apiKeyId) return undefined;
-  const record = state.apiKeysById[apiKeyId];
-  record.lastUsedAt = nowIso();
-  const workspaceId = record.workspaceId ?? (rawApiKey === DEMO_API_KEY ? DEMO_WORKSPACE_ID : undefined);
-  if (!workspaceId) return undefined;
+  if (!row) return undefined;
+
+  // A key must belong to exactly one workspace. Historically a NULL here
+  // produced an unscoped caller that could read every tenant's data, so it
+  // is now an authentication failure rather than a wildcard.
+  if (!row.workspace_id) return undefined;
+
+  const apiKeyId = row.api_key_id ?? row.api_key;
+  await db
+    .prepare("UPDATE api_keys SET last_used_at = ? WHERE api_key = ?")
+    .bind(nowIso(), row.api_key)
+    .run();
 
   return {
     apiKeyId,
-    workspaceId,
-    projectId: record.projectId,
-    keyPrefix: record.keyPrefix,
-    isDemo: rawApiKey === DEMO_API_KEY,
+    workspaceId: row.workspace_id,
+    projectId: row.project_id ?? undefined,
+    keyPrefix: row.key_prefix ?? keyPrefix(rawApiKey),
+    isDemo: false,
   };
 }
 
@@ -1161,13 +1138,11 @@ export function unauthorizedResponse() {
   );
 }
 
-function ensureUsageForKeyFallback(apiKeyId: string) {
-  const state = getState();
-  state.usageByApiKey[apiKeyId] ??= createDefaultUsage(apiKeyId);
-  return state.usageByApiKey[apiKeyId];
-}
-
-async function ensureD1UsageForKey(db: AgentWingD1Database, apiKeyId: string, record?: AgentWingApiKeyRecord) {
+async function ensureD1UsageForKey(
+  db: AgentWingD1Database,
+  apiKeyId: string,
+  record?: AgentWingApiKeyRecord,
+) {
   await db
     .prepare(
       `INSERT OR IGNORE INTO usage
@@ -1183,29 +1158,25 @@ async function ensureD1UsageForKey(db: AgentWingD1Database, apiKeyId: string, re
     .run();
 }
 
-export async function listProjects(workspaceId: string): Promise<AgentWingProject[]> {
+export async function listProjects(
+  workspaceId: string,
+): Promise<AgentWingProject[]> {
   requireWorkspace(workspaceId, "listProjects");
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      const result = await db
-        .prepare(
-          "SELECT project_id, workspace_id, name, created_at FROM projects WHERE workspace_id = ? ORDER BY created_at DESC",
-        )
-        .bind(workspaceId)
-        .all<ProjectRow>();
-      return (result.results ?? []).map(mapProjectRow);
-    } catch (error) {
-      warnD1Fallback("listProjects", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  return getState().projects.filter((project) => project.workspaceId === workspaceId);
+  await ensureD1DemoKey(db);
+  const result = await db
+    .prepare(
+      "SELECT project_id, workspace_id, name, created_at FROM projects WHERE workspace_id = ? ORDER BY created_at DESC",
+    )
+    .bind(workspaceId)
+    .all<ProjectRow>();
+  return (result.results ?? []).map(mapProjectRow);
 }
 
-export async function createProject(name: string, workspaceId?: string): Promise<AgentWingProject> {
+export async function createProject(
+  name: string,
+  workspaceId?: string,
+): Promise<AgentWingProject> {
   const project: AgentWingProject = {
     projectId: randomId("proj"),
     workspaceId,
@@ -1218,73 +1189,52 @@ export async function createProject(name: string, workspaceId?: string): Promise
   }
 
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      await db
-        .prepare("INSERT INTO projects (project_id, workspace_id, name, created_at) VALUES (?, ?, ?, ?)")
-        .bind(project.projectId, workspaceId ?? null, project.name, project.createdAt)
-        .run();
-      return project;
-    } catch (error) {
-      warnD1Fallback("listApiKeys", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  getState().projects.unshift(project);
+  await ensureD1DemoKey(db);
+  await db
+    .prepare(
+      "INSERT INTO projects (project_id, workspace_id, name, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .bind(
+      project.projectId,
+      workspaceId ?? null,
+      project.name,
+      project.createdAt,
+    )
+    .run();
   return project;
 }
 
-export async function listApiKeys(workspaceId: string, projectId?: string): Promise<AgentWingApiKeyRecord[]> {
+export async function listApiKeys(
+  workspaceId: string,
+  projectId?: string,
+): Promise<AgentWingApiKeyRecord[]> {
   requireWorkspace(workspaceId, "listApiKeys");
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      const conditions = ["project_id IS NOT NULL", "workspace_id = ?"];
-      const values: string[] = [workspaceId];
-      if (projectId) {
-        conditions.push("project_id = ?");
-        values.push(projectId);
-      }
-      const statement = db
-        .prepare(
-          `SELECT api_key, api_key_id, workspace_id, project_id, key_prefix, plan_name, action_check_limit,
-                  sandbox_run_limit, created_at, last_used_at, revoked_at, disabled_at
-           FROM api_keys
-           WHERE ${conditions.join(" AND ")}
-           ORDER BY created_at DESC`,
-        )
-        .bind(...values);
-      const result = await statement.all<ApiKeyRow>();
-      return (result.results ?? []).map(mapApiKeyRow);
-    } catch (error) {
-      warnD1Fallback("generateApiKey", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
+  await ensureD1DemoKey(db);
+  const conditions = ["project_id IS NOT NULL", "workspace_id = ?"];
+  const values: string[] = [workspaceId];
+  if (projectId) {
+    conditions.push("project_id = ?");
+    values.push(projectId);
   }
-
-  return Object.values(getState().apiKeysById)
-    .filter((record) => record.apiKeyId !== DEMO_API_KEY)
-    .filter((record) => !projectId || record.projectId === projectId)
-    .filter((record) => record.workspaceId === workspaceId)
-    .map((record) => ({
-      apiKeyId: record.apiKeyId,
-      workspaceId: record.workspaceId,
-      projectId: record.projectId,
-      keyPrefix: record.keyPrefix,
-      planName: record.planName,
-      actionCheckLimit: record.actionCheckLimit,
-      sandboxRunLimit: record.sandboxRunLimit,
-      createdAt: record.createdAt,
-      lastUsedAt: record.lastUsedAt,
-    }));
+  const statement = db
+    .prepare(
+      `SELECT api_key, api_key_id, workspace_id, project_id, key_prefix, plan_name, action_check_limit,
+                sandbox_run_limit, created_at, last_used_at, revoked_at, disabled_at
+         FROM api_keys
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY created_at DESC`,
+    )
+    .bind(...values);
+  const result = await statement.all<ApiKeyRow>();
+  return (result.results ?? []).map(mapApiKeyRow);
 }
 
 export async function generateApiKey(projectId: string, workspaceId: string) {
   requireWorkspace(workspaceId, "generateApiKey");
-  const project = (await listProjects(workspaceId)).find((item) => item.projectId === projectId);
+  const project = (await listProjects(workspaceId)).find(
+    (item) => item.projectId === projectId,
+  );
   if (!project) {
     throw new Error("Project not found.");
   }
@@ -1304,174 +1254,105 @@ export async function generateApiKey(projectId: string, workspaceId: string) {
   const hash = await sha256(apiKey);
 
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      await db
-        .prepare(
-          `INSERT INTO api_keys
-           (api_key, api_key_id, workspace_id, project_id, key_prefix, key_hash, plan_name, action_check_limit, sandbox_run_limit, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          apiKeyId,
-          apiKeyId,
-          record.workspaceId ?? null,
-          projectId,
-          record.keyPrefix,
-          hash,
-          record.planName,
-          record.actionCheckLimit,
-          record.sandboxRunLimit,
-          record.createdAt,
-        )
-        .run();
-      await ensureD1UsageForKey(db, apiKeyId, record);
-      return { apiKey, record };
-    } catch (error) {
-      warnD1Fallback("getUsageForApiKey", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  const state = getState();
-  state.apiKeysById[apiKeyId] = {
-    ...record,
-    keyHash: hash,
-    rawKey: apiKey,
-  };
-  state.rawApiKeyToId[apiKey] = apiKeyId;
-  state.usageByApiKey[apiKeyId] = createDefaultUsage(apiKeyId);
-
+  await ensureD1DemoKey(db);
+  await db
+    .prepare(
+      `INSERT INTO api_keys
+         (api_key, api_key_id, workspace_id, project_id, key_prefix, key_hash, plan_name, action_check_limit, sandbox_run_limit, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      apiKeyId,
+      apiKeyId,
+      record.workspaceId ?? null,
+      projectId,
+      record.keyPrefix,
+      hash,
+      record.planName,
+      record.actionCheckLimit,
+      record.sandboxRunLimit,
+      record.createdAt,
+    )
+    .run();
+  await ensureD1UsageForKey(db, apiKeyId, record);
   return { apiKey, record };
 }
 
 export async function getUsageForApiKey(apiKeyId: string) {
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      await ensureD1UsageForKey(db, apiKeyId);
-      const row = await db
-        .prepare(
-          `SELECT api_key, plan_name, action_checks_used, action_check_limit,
-                  sandbox_runs_used, sandbox_run_limit, receipts_created
-           FROM usage
-           WHERE api_key = ?`,
-        )
-        .bind(apiKeyId)
-        .first<UsageRow>();
-      return publicUsage(row ? mapUsageRow(row) : createDefaultUsage(apiKeyId));
-    } catch (error) {
-      warnD1Fallback("incrementActionCheckUsage", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  return publicUsage(ensureUsageForKeyFallback(apiKeyId));
+  await ensureD1DemoKey(db);
+  await ensureD1UsageForKey(db, apiKeyId);
+  const row = await db
+    .prepare(
+      `SELECT api_key, plan_name, action_checks_used, action_check_limit,
+                sandbox_runs_used, sandbox_run_limit, receipts_created
+         FROM usage
+         WHERE api_key = ?`,
+    )
+    .bind(apiKeyId)
+    .first<UsageRow>();
+  return publicUsage(row ? mapUsageRow(row) : createDefaultUsage(apiKeyId));
 }
 
 export async function getUsageForWorkspace(workspaceId: string) {
   requireWorkspace(workspaceId, "getUsageForWorkspace");
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      const statement = db
-        .prepare(
-          `SELECT
-             COALESCE(SUM(usage.action_checks_used), 0) AS action_checks_used,
-             COALESCE(SUM(usage.action_check_limit), 0) AS action_check_limit,
-             COALESCE(SUM(usage.sandbox_runs_used), 0) AS sandbox_runs_used,
-             COALESCE(SUM(usage.sandbox_run_limit), 0) AS sandbox_run_limit,
-             COALESCE(SUM(usage.receipts_created), 0) AS receipts_created
-           FROM usage
-           INNER JOIN api_keys ON api_keys.api_key = usage.api_key
-           WHERE api_keys.workspace_id = ?`,
-        )
-        .bind(workspaceId);
-      const row = await statement.first<UsageRow>();
-      return publicUsage({
-        apiKey: workspaceId ? "workspace" : "all-workspaces",
-        planName: "Beta",
-        actionChecksUsed: row?.action_checks_used ?? 0,
-        actionCheckLimit: row?.action_check_limit || BETA_ACTION_CHECK_LIMIT,
-        sandboxRunsUsed: row?.sandbox_runs_used ?? 0,
-        sandboxRunLimit: row?.sandbox_run_limit || BETA_SANDBOX_RUN_LIMIT,
-        receiptsCreated: row?.receipts_created ?? 0,
-      });
-    } catch (error) {
-      warnD1Fallback("getUsageForWorkspace", error);
-    }
-  }
-
-  const apiKeys = Object.values(getState().apiKeysById).filter(
-    (record) => record.apiKeyId !== DEMO_API_KEY && (!workspaceId || record.workspaceId === workspaceId),
-  );
-  const usageRows = apiKeys.map((record) => ensureUsageForKeyFallback(record.apiKeyId));
+  await ensureD1DemoKey(db);
+  const statement = db
+    .prepare(
+      `SELECT
+           COALESCE(SUM(usage.action_checks_used), 0) AS action_checks_used,
+           COALESCE(SUM(usage.action_check_limit), 0) AS action_check_limit,
+           COALESCE(SUM(usage.sandbox_runs_used), 0) AS sandbox_runs_used,
+           COALESCE(SUM(usage.sandbox_run_limit), 0) AS sandbox_run_limit,
+           COALESCE(SUM(usage.receipts_created), 0) AS receipts_created
+         FROM usage
+         INNER JOIN api_keys ON api_keys.api_key = usage.api_key
+         WHERE api_keys.workspace_id = ?`,
+    )
+    .bind(workspaceId);
+  const row = await statement.first<UsageRow>();
   return publicUsage({
     apiKey: workspaceId ? "workspace" : "all-workspaces",
     planName: "Beta",
-    actionChecksUsed: usageRows.reduce((total, usage) => total + usage.actionChecksUsed, 0),
-    actionCheckLimit: usageRows.reduce((total, usage) => total + usage.actionCheckLimit, 0) || BETA_ACTION_CHECK_LIMIT,
-    sandboxRunsUsed: usageRows.reduce((total, usage) => total + usage.sandboxRunsUsed, 0),
-    sandboxRunLimit: usageRows.reduce((total, usage) => total + usage.sandboxRunLimit, 0) || BETA_SANDBOX_RUN_LIMIT,
-    receiptsCreated: usageRows.reduce((total, usage) => total + usage.receiptsCreated, 0),
+    actionChecksUsed: row?.action_checks_used ?? 0,
+    actionCheckLimit: row?.action_check_limit || BETA_ACTION_CHECK_LIMIT,
+    sandboxRunsUsed: row?.sandbox_runs_used ?? 0,
+    sandboxRunLimit: row?.sandbox_run_limit || BETA_SANDBOX_RUN_LIMIT,
+    receiptsCreated: row?.receipts_created ?? 0,
   });
 }
 
 export async function incrementActionCheckUsage(apiKeyId: string) {
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      await ensureD1UsageForKey(db, apiKeyId);
-      await db
-        .prepare(
-          `UPDATE usage
-           SET action_checks_used = action_checks_used + 1,
-               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-           WHERE api_key = ?`,
-        )
-        .bind(apiKeyId)
-        .run();
-      return getUsageForApiKey(apiKeyId);
-    } catch (error) {
-      warnD1Fallback("incrementSandboxRunUsage", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  const usage = ensureUsageForKeyFallback(apiKeyId);
-  usage.actionChecksUsed += 1;
-  return publicUsage(usage);
+  await ensureD1DemoKey(db);
+  await ensureD1UsageForKey(db, apiKeyId);
+  await db
+    .prepare(
+      `UPDATE usage
+         SET action_checks_used = action_checks_used + 1,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE api_key = ?`,
+    )
+    .bind(apiKeyId)
+    .run();
+  return getUsageForApiKey(apiKeyId);
 }
 
 export async function incrementSandboxRunUsage(apiKeyId: string) {
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      await ensureD1UsageForKey(db, apiKeyId);
-      await db
-        .prepare(
-          `UPDATE usage
-           SET sandbox_runs_used = sandbox_runs_used + 1,
-               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-           WHERE api_key = ?`,
-        )
-        .bind(apiKeyId)
-        .run();
-      return getUsageForApiKey(apiKeyId);
-    } catch (error) {
-      warnD1Fallback("incrementSandboxRunUsage", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  const usage = ensureUsageForKeyFallback(apiKeyId);
-  usage.sandboxRunsUsed += 1;
-  return publicUsage(usage);
+  await ensureD1DemoKey(db);
+  await ensureD1UsageForKey(db, apiKeyId);
+  await db
+    .prepare(
+      `UPDATE usage
+         SET sandbox_runs_used = sandbox_runs_used + 1,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE api_key = ?`,
+    )
+    .bind(apiKeyId)
+    .run();
+  return getUsageForApiKey(apiKeyId);
 }
 
 export async function createReceipt(
@@ -1505,81 +1386,64 @@ export async function createReceipt(
   };
 
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      await db
-        .prepare(
-          `INSERT INTO receipts
-           (receipt_id, api_key, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action, decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          receipt.receiptId,
-          apiKeyId ?? null,
-          workspaceId ?? null,
-          receipt.projectId ?? null,
-          receipt.sessionId ?? null,
-          receipt.agentId ?? null,
-          receipt.actionType,
-          receipt.tool ?? null,
-          receipt.target ?? null,
-          JSON.stringify(receipt.rawAction),
-          receipt.decision,
-          receipt.risk,
-          receipt.policy,
-          receipt.feedback,
-          receipt.provider ?? null,
-          receipt.mode ?? null,
-          receipt.stdout ?? null,
-          receipt.stderr ?? null,
-          receipt.exitCode ?? null,
-          receipt.durationMs ?? null,
-          receipt.error ?? null,
-          receipt.createdAt,
-        )
-        .run();
+  await ensureD1DemoKey(db);
+  await db
+    .prepare(
+      `INSERT INTO receipts
+         (receipt_id, api_key, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action, decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      receipt.receiptId,
+      apiKeyId ?? null,
+      workspaceId ?? null,
+      receipt.projectId ?? null,
+      receipt.sessionId ?? null,
+      receipt.agentId ?? null,
+      receipt.actionType,
+      receipt.tool ?? null,
+      receipt.target ?? null,
+      JSON.stringify(receipt.rawAction),
+      receipt.decision,
+      receipt.risk,
+      receipt.policy,
+      receipt.feedback,
+      receipt.provider ?? null,
+      receipt.mode ?? null,
+      receipt.stdout ?? null,
+      receipt.stderr ?? null,
+      receipt.exitCode ?? null,
+      receipt.durationMs ?? null,
+      receipt.error ?? null,
+      receipt.createdAt,
+    )
+    .run();
 
-      if (apiKeyId) {
-        await db
-          .prepare(
-            `UPDATE usage
-             SET receipts_created = receipts_created + 1,
-                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-             WHERE api_key = ?`,
-          )
-          .bind(apiKeyId)
-          .run();
-      }
-
-      // Chain the receipt so it cannot later be edited unnoticed.
-      //
-      // Best-effort on purpose: the receipt itself is already durably written,
-      // and losing the decision record because the chain append failed would
-      // be a strictly worse outcome than an unchained entry. A gap is visible
-      // to the verifier, which is the honest failure mode — silently dropping
-      // the receipt would not be.
-      if (workspaceId) {
-        try {
-          await appendReceiptToChain(db, workspaceId, receipt);
-        } catch (error) {
-          warnD1Fallback("appendReceiptToChain", error);
-        }
-      }
-
-      return receipt;
-    } catch (error) {
-      warnD1Fallback("createReceipt", error);
-      // D1 binding may be absent from local Next dev or present before migrations are applied.
-    }
+  if (apiKeyId) {
+    await db
+      .prepare(
+        `UPDATE usage
+           SET receipts_created = receipts_created + 1,
+               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE api_key = ?`,
+      )
+      .bind(apiKeyId)
+      .run();
   }
 
-  const state = getState();
-  state.receipts.unshift(receipt);
-  state.receipts = state.receipts.slice(0, 500);
-  if (apiKeyId) {
-    const usage = ensureUsageForKeyFallback(apiKeyId);
-    usage.receiptsCreated += 1;
+  // Chain the receipt so it cannot later be edited unnoticed.
+  //
+  // Best-effort on purpose: the receipt itself is already durably written,
+  // and losing the decision record because the chain append failed would
+  // be a strictly worse outcome than an unchained entry. A gap is visible
+  // to the verifier, which is the honest failure mode — silently dropping
+  // the receipt would not be.
+  if (workspaceId) {
+    try {
+      await appendReceiptToChain(db, workspaceId, receipt);
+    } catch (error) {
+      warnD1Fallback("appendReceiptToChain", error);
+    }
   }
 
   return receipt;
@@ -1588,99 +1452,97 @@ export async function createReceipt(
 export async function listReceipts(workspaceId: string) {
   requireWorkspace(workspaceId, "listReceipts");
   const db = await getDb();
-  if (db) {
-    try {
-      const result = await db
-        .prepare(
-          `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
-                  decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
-           FROM receipts
-           WHERE workspace_id = ?
-           ORDER BY created_at DESC
-           LIMIT 500`,
-        )
-        .bind(workspaceId)
-        .all<ReceiptRow>();
-      const d1Receipts = (result.results ?? []).map(mapReceiptRow);
-      const memoryReceipts = getState()
-        .receipts.filter((receipt) => !d1Receipts.some((d1Receipt) => d1Receipt.receiptId === receipt.receiptId))
-        .filter((receipt) => receipt.workspaceId === workspaceId);
-      return [...memoryReceipts, ...d1Receipts]
-        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-        .slice(0, 500);
-    } catch (error) {
-      warnD1Fallback("listReceipts", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  return getState().receipts.filter((receipt) => receipt.workspaceId === workspaceId);
+  const result = await db
+    .prepare(
+      `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
+                decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
+         FROM receipts
+         WHERE workspace_id = ?
+         ORDER BY created_at DESC
+         LIMIT 500`,
+    )
+    .bind(workspaceId)
+    .all<ReceiptRow>();
+  return (result.results ?? []).map(mapReceiptRow);
 }
 
 export async function getReceipt(receiptId: string, workspaceId: string) {
   requireWorkspace(workspaceId, "getReceipt");
   const db = await getDb();
-  const memoryReceipt = getState().receipts.find(
-    (receipt) => receipt.receiptId === receiptId && receipt.workspaceId === workspaceId,
-  );
-  if (db) {
-    try {
-      const row = await db
-        .prepare(
-          `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
-                  decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
-           FROM receipts
-           WHERE receipt_id = ? AND workspace_id = ?`,
-        )
-        .bind(receiptId, workspaceId)
-        .first<ReceiptRow>();
-      return row ? mapReceiptRow(row) : memoryReceipt;
-    } catch (error) {
-      warnD1Fallback("getReceipt", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  return memoryReceipt;
+  const row = await db
+    .prepare(
+      `SELECT receipt_id, workspace_id, project_id, session_id, agent_id, action_type, tool, target, raw_action,
+                decision, risk, policy, feedback, provider, mode, stdout, stderr, exit_code, duration_ms, error, created_at
+         FROM receipts
+         WHERE receipt_id = ? AND workspace_id = ?`,
+    )
+    .bind(receiptId, workspaceId)
+    .first<ReceiptRow>();
+  return row ? mapReceiptRow(row) : undefined;
 }
 
 export async function updateReceiptExecutionResult(
   receiptId: string,
   workspaceId: string,
-  result: Partial<Pick<ActionReceipt, "provider" | "mode" | "stdout" | "stderr" | "exitCode" | "durationMs" | "error" | "feedback">>,
+  result: Partial<
+    Pick<
+      ActionReceipt,
+      | "provider"
+      | "mode"
+      | "stdout"
+      | "stderr"
+      | "exitCode"
+      | "durationMs"
+      | "error"
+      | "feedback"
+    >
+  >,
 ) {
   requireWorkspace(workspaceId, "updateReceiptExecutionResult");
   const db = await getDb();
-  if (db) {
-    try {
-      const sets: string[] = [];
-      const values: unknown[] = [];
-      if (result.provider !== undefined) { sets.push("provider = ?"); values.push(result.provider); }
-      if (result.mode !== undefined) { sets.push("mode = ?"); values.push(result.mode); }
-      if (result.stdout !== undefined) { sets.push("stdout = ?"); values.push(result.stdout); }
-      if (result.stderr !== undefined) { sets.push("stderr = ?"); values.push(result.stderr); }
-      if (result.exitCode !== undefined) { sets.push("exit_code = ?"); values.push(result.exitCode); }
-      if (result.durationMs !== undefined) { sets.push("duration_ms = ?"); values.push(result.durationMs); }
-      if (result.error !== undefined) { sets.push("error = ?"); values.push(result.error); }
-      if (result.feedback !== undefined) { sets.push("feedback = ?"); values.push(result.feedback); }
-
-      if (sets.length > 0) {
-        values.push(receiptId, workspaceId);
-        await db
-          .prepare(`UPDATE receipts SET ${sets.join(", ")} WHERE receipt_id = ? AND workspace_id = ?`)
-          .bind(...values)
-          .run();
-      }
-    } catch (error) {
-      warnD1Fallback("updateReceiptExecutionResult", error);
-    }
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (result.provider !== undefined) {
+    sets.push("provider = ?");
+    values.push(result.provider);
+  }
+  if (result.mode !== undefined) {
+    sets.push("mode = ?");
+    values.push(result.mode);
+  }
+  if (result.stdout !== undefined) {
+    sets.push("stdout = ?");
+    values.push(result.stdout);
+  }
+  if (result.stderr !== undefined) {
+    sets.push("stderr = ?");
+    values.push(result.stderr);
+  }
+  if (result.exitCode !== undefined) {
+    sets.push("exit_code = ?");
+    values.push(result.exitCode);
+  }
+  if (result.durationMs !== undefined) {
+    sets.push("duration_ms = ?");
+    values.push(result.durationMs);
+  }
+  if (result.error !== undefined) {
+    sets.push("error = ?");
+    values.push(result.error);
+  }
+  if (result.feedback !== undefined) {
+    sets.push("feedback = ?");
+    values.push(result.feedback);
   }
 
-  const memoryReceipt = getState().receipts.find(
-    (receipt) => receipt.receiptId === receiptId && (!workspaceId || receipt.workspaceId === workspaceId),
-  );
-  if (memoryReceipt) {
-    Object.assign(memoryReceipt, result);
+  if (sets.length > 0) {
+    values.push(receiptId, workspaceId);
+    await db
+      .prepare(
+        `UPDATE receipts SET ${sets.join(", ")} WHERE receipt_id = ? AND workspace_id = ?`,
+      )
+      .bind(...values)
+      .run();
   }
 }
 
@@ -1707,7 +1569,9 @@ type CreateActionRunInput = {
   approvalSource?: string;
 };
 
-export async function createActionRun(input: CreateActionRunInput): Promise<ActionRun> {
+export async function createActionRun(
+  input: CreateActionRunInput,
+): Promise<ActionRun> {
   const now = nowIso();
   const run: ActionRun = {
     runId: randomId("run"),
@@ -1739,54 +1603,45 @@ export async function createActionRun(input: CreateActionRunInput): Promise<Acti
   };
 
   const db = await getDb();
-  if (db) {
-    try {
-      await db
-        .prepare(
-          `INSERT INTO action_runs
-           (run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
-            action_json, decision, risk, policy, feedback, next_step, status, execution_target,
-            sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
-            error_message, duration_ms, created_at, updated_at, completed_at, approval_source)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          run.runId,
-          run.workspaceId,
-          run.projectId ?? null,
-          run.apiKeyId ?? null,
-          run.receiptId ?? null,
-          run.approvalId ?? null,
-          JSON.stringify(run.action),
-          run.decision,
-          run.risk,
-          run.policy,
-          run.feedback ?? null,
-          run.nextStep ?? null,
-          run.status,
-          run.executionTarget,
-          run.sandboxProvider ?? null,
-          run.sandboxRunId ?? null,
-          run.stdout ?? null,
-          run.stderr ?? null,
-          run.exitCode ?? null,
-          run.executionLogs ? JSON.stringify(run.executionLogs) : null,
-          run.errorMessage ?? null,
-          run.durationMs ?? null,
-          run.createdAt,
-          run.updatedAt,
-          run.completedAt ?? null,
-          run.approvalSource ?? null,
-        )
-        .run();
-    } catch (error) {
-      warnD1Fallback("createActionRun", error);
-    }
-  }
+  await db
+    .prepare(
+      `INSERT INTO action_runs
+         (run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+          action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+          sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+          error_message, duration_ms, created_at, updated_at, completed_at, approval_source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      run.runId,
+      run.workspaceId,
+      run.projectId ?? null,
+      run.apiKeyId ?? null,
+      run.receiptId ?? null,
+      run.approvalId ?? null,
+      JSON.stringify(run.action),
+      run.decision,
+      run.risk,
+      run.policy,
+      run.feedback ?? null,
+      run.nextStep ?? null,
+      run.status,
+      run.executionTarget,
+      run.sandboxProvider ?? null,
+      run.sandboxRunId ?? null,
+      run.stdout ?? null,
+      run.stderr ?? null,
+      run.exitCode ?? null,
+      run.executionLogs ? JSON.stringify(run.executionLogs) : null,
+      run.errorMessage ?? null,
+      run.durationMs ?? null,
+      run.createdAt,
+      run.updatedAt,
+      run.completedAt ?? null,
+      run.approvalSource ?? null,
+    )
+    .run();
 
-  const state = getState();
-  state.actionRuns.unshift(run);
-  state.actionRuns = state.actionRuns.slice(0, 500);
   return run;
 }
 
@@ -1819,53 +1674,43 @@ export async function updateActionRun(
   const normalizedUpdates = { ...updates, updatedAt: now };
 
   const db = await getDb();
-  if (db) {
-    try {
-      const columnMap: Record<string, string> = {
-        receiptId: "receipt_id",
-        approvalId: "approval_id",
-        feedback: "feedback",
-        nextStep: "next_step",
-        status: "status",
-        executionTarget: "execution_target",
-        sandboxProvider: "sandbox_provider",
-        sandboxRunId: "sandbox_run_id",
-        stdout: "stdout",
-        stderr: "stderr",
-        exitCode: "exit_code",
-        executionLogs: "execution_logs_json",
-        errorMessage: "error_message",
-        durationMs: "duration_ms",
-        completedAt: "completed_at",
-        approvalSource: "approval_source",
-        updatedAt: "updated_at",
-      };
-      const sets: string[] = [];
-      const values: unknown[] = [];
+  const columnMap: Record<string, string> = {
+    receiptId: "receipt_id",
+    approvalId: "approval_id",
+    feedback: "feedback",
+    nextStep: "next_step",
+    status: "status",
+    executionTarget: "execution_target",
+    sandboxProvider: "sandbox_provider",
+    sandboxRunId: "sandbox_run_id",
+    stdout: "stdout",
+    stderr: "stderr",
+    exitCode: "exit_code",
+    executionLogs: "execution_logs_json",
+    errorMessage: "error_message",
+    durationMs: "duration_ms",
+    completedAt: "completed_at",
+    approvalSource: "approval_source",
+    updatedAt: "updated_at",
+  };
+  const sets: string[] = [];
+  const values: unknown[] = [];
 
-      for (const [key, value] of Object.entries(normalizedUpdates)) {
-        const column = columnMap[key];
-        if (!column || value === undefined) continue;
-        sets.push(`${column} = ?`);
-        values.push(key === "executionLogs" ? JSON.stringify(value) : value);
-      }
-
-      if (sets.length > 0) {
-        values.push(runId, workspaceId);
-        await db
-          .prepare(`UPDATE action_runs SET ${sets.join(", ")} WHERE run_id = ? AND workspace_id = ?`)
-          .bind(...values)
-          .run();
-      }
-    } catch (error) {
-      warnD1Fallback("updateActionRun", error);
-    }
+  for (const [key, value] of Object.entries(normalizedUpdates)) {
+    const column = columnMap[key];
+    if (!column || value === undefined) continue;
+    sets.push(`${column} = ?`);
+    values.push(key === "executionLogs" ? JSON.stringify(value) : value);
   }
 
-  const state = getState();
-  const memoryRun = state.actionRuns.find((run) => run.runId === runId && run.workspaceId === workspaceId);
-  if (memoryRun) {
-    Object.assign(memoryRun, normalizedUpdates);
+  if (sets.length > 0) {
+    values.push(runId, workspaceId);
+    await db
+      .prepare(
+        `UPDATE action_runs SET ${sets.join(", ")} WHERE run_id = ? AND workspace_id = ?`,
+      )
+      .bind(...values)
+      .run();
   }
 
   return getActionRun(runId, workspaceId);
@@ -1879,31 +1724,26 @@ export async function updateActionRun(
  * hundredth most recent run silently did nothing to the run itself --
  * `idx_action_runs_approval_id` has existed the whole time.
  */
-export async function getActionRunByApprovalId(workspaceId: string, approvalId: string): Promise<ActionRun | undefined> {
+export async function getActionRunByApprovalId(
+  workspaceId: string,
+  approvalId: string,
+): Promise<ActionRun | undefined> {
   requireWorkspace(workspaceId, "getActionRunByApprovalId");
   const db = await getDb();
 
-  if (db) {
-    try {
-      const row = await db
-        .prepare(
-          `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
-                  action_json, decision, risk, policy, feedback, next_step, status, execution_target,
-                  sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
-                  error_message, duration_ms, created_at, updated_at, completed_at, approval_source
-           FROM action_runs
-           WHERE approval_id = ? AND workspace_id = ?
-           LIMIT 1`,
-        )
-        .bind(approvalId, workspaceId)
-        .first<ActionRunRow>();
-      if (row) return mapActionRunRow(row);
-    } catch (error) {
-      warnD1Fallback("getActionRunByApprovalId", error);
-    }
-  }
-
-  return getState().actionRuns.find((run) => run.approvalId === approvalId && run.workspaceId === workspaceId);
+  const row = await db
+    .prepare(
+      `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+                action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+                sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+                error_message, duration_ms, created_at, updated_at, completed_at, approval_source
+         FROM action_runs
+         WHERE approval_id = ? AND workspace_id = ?
+         LIMIT 1`,
+    )
+    .bind(approvalId, workspaceId)
+    .first<ActionRunRow>();
+  if (row) return mapActionRunRow(row);
 }
 
 export async function listActionRuns(
@@ -1913,71 +1753,52 @@ export async function listActionRuns(
 ): Promise<ActionRun[]> {
   requireWorkspace(workspaceId, "listActionRuns");
   const db = await getDb();
-  const memoryRuns = getState().actionRuns.filter(
-    (run) => run.workspaceId === workspaceId && (!projectId || run.projectId === projectId),
-  );
 
-  if (db) {
-    try {
-      const conditions: string[] = ["workspace_id = ?"];
-      const values: unknown[] = [workspaceId];
-      if (projectId) { conditions.push("project_id = ?"); values.push(projectId); }
-      values.push(limit);
-      const where = `WHERE ${conditions.join(" AND ")}`;
-      const result = await db
-        .prepare(
-          `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
-                  action_json, decision, risk, policy, feedback, next_step, status, execution_target,
-                  sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
-                  error_message, duration_ms, created_at, updated_at, completed_at, approval_source
-           FROM action_runs
-           ${where}
-           ORDER BY created_at DESC
-           LIMIT ?`,
-        )
-        .bind(...values)
-        .all<ActionRunRow>();
-      const d1Runs = (result.results ?? []).map(mapActionRunRow);
-      return [...memoryRuns.filter((run) => !d1Runs.some((d1Run) => d1Run.runId === run.runId)), ...d1Runs]
-        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-        .slice(0, limit);
-    } catch (error) {
-      warnD1Fallback("listActionRuns", error);
-    }
+  const conditions: string[] = ["workspace_id = ?"];
+  const values: unknown[] = [workspaceId];
+  if (projectId) {
+    conditions.push("project_id = ?");
+    values.push(projectId);
   }
-
-  return memoryRuns
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, limit);
+  values.push(limit);
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const result = await db
+    .prepare(
+      `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+                action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+                sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+                error_message, duration_ms, created_at, updated_at, completed_at, approval_source
+         FROM action_runs
+         ${where}
+         ORDER BY created_at DESC
+         LIMIT ?`,
+    )
+    .bind(...values)
+    .all<ActionRunRow>();
+  // Ordering and the limit are applied by the query, not in JavaScript, so
+  // the result is the database's answer rather than a reconciliation of two.
+  return (result.results ?? []).map(mapActionRunRow);
 }
 
-export async function getActionRun(runId: string, workspaceId: string): Promise<ActionRun | undefined> {
+export async function getActionRun(
+  runId: string,
+  workspaceId: string,
+): Promise<ActionRun | undefined> {
   requireWorkspace(workspaceId, "getActionRun");
   const db = await getDb();
-  const memoryRun = getState().actionRuns.find(
-    (run) => run.runId === runId && run.workspaceId === workspaceId,
-  );
 
-  if (db) {
-    try {
-      const row = await db
-        .prepare(
-          `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
-                  action_json, decision, risk, policy, feedback, next_step, status, execution_target,
-                  sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
-                  error_message, duration_ms, created_at, updated_at, completed_at, approval_source
-           FROM action_runs
-           WHERE run_id = ? AND workspace_id = ?`,
-        )
-        .bind(runId, workspaceId)
-        .first<ActionRunRow>();
-      return row ? mapActionRunRow(row) : memoryRun;
-    } catch (error) {
-      warnD1Fallback("getActionRun", error);
-    }
-  }
-
-  return memoryRun;
+  const row = await db
+    .prepare(
+      `SELECT run_id, workspace_id, project_id, api_key_id, receipt_id, approval_id,
+                action_json, decision, risk, policy, feedback, next_step, status, execution_target,
+                sandbox_provider, sandbox_run_id, stdout, stderr, exit_code, execution_logs_json,
+                error_message, duration_ms, created_at, updated_at, completed_at, approval_source
+         FROM action_runs
+         WHERE run_id = ? AND workspace_id = ?`,
+    )
+    .bind(runId, workspaceId)
+    .first<ActionRunRow>();
+  return row ? mapActionRunRow(row) : undefined;
 }
 
 export async function appendExecutionEvent(
@@ -1996,59 +1817,60 @@ export async function appendExecutionEvent(
   };
 
   const db = await getDb();
-  if (db) {
-    try {
-      await db
-        .prepare(
-          `INSERT INTO execution_events
-           (event_id, run_id, event_type, message, metadata_json, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          event.eventId,
-          event.runId,
-          event.eventType,
-          event.message ?? null,
-          event.metadata ? JSON.stringify(event.metadata).slice(0, 4096) : null,
-          event.createdAt,
-        )
-        .run();
-    } catch (error) {
-      warnD1Fallback("appendExecutionEvent", error);
-    }
-  }
 
-  const state = getState();
-  state.executionEvents.push(event);
-  const run = state.actionRuns.find((candidate) => candidate.runId === runId);
-  if (run) run.executionLogs = [...(run.executionLogs ?? []), event];
+  // The workspace is taken from the run rather than passed in.
+  //
+  // Threading a workspace id through seventeen call sites is seventeen chances
+  // to pass the wrong one, and the run is the authority on which workspace its
+  // events belong to anyway. A consequence worth having: an event for a run
+  // that does not exist writes nothing, where before it would have been stored
+  // unreachable.
+  await db
+    .prepare(
+      `INSERT INTO execution_events
+         (event_id, run_id, workspace_id, event_type, message, metadata_json, created_at)
+       SELECT ?, ?, action_runs.workspace_id, ?, ?, ?, ?
+       FROM action_runs
+       WHERE action_runs.run_id = ?`,
+    )
+    .bind(
+      event.eventId,
+      event.runId,
+      event.eventType,
+      event.message ?? null,
+      event.metadata ? JSON.stringify(event.metadata).slice(0, 4096) : null,
+      event.createdAt,
+      event.runId,
+    )
+    .run();
+
   return event;
 }
 
-export async function listExecutionEvents(runId: string): Promise<ExecutionEvent[]> {
+/**
+ * The timeline for one run, within one workspace.
+ *
+ * `execution_events` was the only tenant-bearing table with no workspace
+ * column, so its isolation rested on the caller having looked the run up
+ * correctly first. It now carries its own predicate like every other table.
+ */
+export async function listExecutionEvents(
+  runId: string,
+  workspaceId: string,
+): Promise<ExecutionEvent[]> {
+  requireWorkspace(workspaceId, "listExecutionEvents");
   const db = await getDb();
-  const memoryEvents = getState().executionEvents.filter((event) => event.runId === runId);
 
-  if (db) {
-    try {
-      const result = await db
-        .prepare(
-          `SELECT event_id, run_id, event_type, message, metadata_json, created_at
-           FROM execution_events
-           WHERE run_id = ?
-           ORDER BY created_at ASC`,
-        )
-        .bind(runId)
-        .all<ExecutionEventRow>();
-      const d1Events = (result.results ?? []).map(mapExecutionEventRow);
-      return [...d1Events, ...memoryEvents.filter((event) => !d1Events.some((d1Event) => d1Event.eventId === event.eventId))]
-        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-    } catch (error) {
-      warnD1Fallback("listExecutionEvents", error);
-    }
-  }
-
-  return memoryEvents.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  const result = await db
+    .prepare(
+      `SELECT event_id, run_id, event_type, message, metadata_json, created_at
+         FROM execution_events
+         WHERE run_id = ? AND workspace_id = ?
+         ORDER BY created_at ASC`,
+    )
+    .bind(runId, workspaceId)
+    .all<ExecutionEventRow>();
+  return (result.results ?? []).map(mapExecutionEventRow);
 }
 
 export async function createRunnerApprovalToken(opts: {
@@ -2061,7 +1883,9 @@ export async function createRunnerApprovalToken(opts: {
   const token = `aw_rat_${randomToken(24)}`;
   const tokenHash = await sha256(token);
   const now = nowIso();
-  const expiresAt = new Date(Date.now() + (opts.expiresInMs ?? 15 * 60 * 1000)).toISOString();
+  const expiresAt = new Date(
+    Date.now() + (opts.expiresInMs ?? 15 * 60 * 1000),
+  ).toISOString();
   const record: RunnerApprovalTokenRecord = {
     tokenId: randomId("rat"),
     runId: opts.runId,
@@ -2074,37 +1898,39 @@ export async function createRunnerApprovalToken(opts: {
   };
 
   const db = await getDb();
-  if (db) {
-    try {
-      await db
-        .prepare(
-          `INSERT INTO runner_approval_tokens
-           (token_id, run_id, workspace_id, token_hash, surface, runner_id, expires_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          record.tokenId,
-          record.runId,
-          record.workspaceId,
-          record.tokenHash,
-          record.surface,
-          record.runnerId ?? null,
-          record.expiresAt,
-          record.createdAt,
-        )
-        .run();
-    } catch (error) {
-      warnD1Fallback("createRunnerApprovalToken", error);
-    }
-  }
+  await db
+    .prepare(
+      `INSERT INTO runner_approval_tokens
+         (token_id, run_id, workspace_id, token_hash, surface, runner_id, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      record.tokenId,
+      record.runId,
+      record.workspaceId,
+      record.tokenHash,
+      record.surface,
+      record.runnerId ?? null,
+      record.expiresAt,
+      record.createdAt,
+    )
+    .run();
 
-  getState().runnerApprovalTokens.unshift(record);
-  getState().runnerApprovalTokens = getState().runnerApprovalTokens.slice(0, 500);
   return { token, expiresAt };
 }
 
-type ConsumeTokenFailure = { ok: false; error: string; status: number; code: string };
-type ConsumeTokenSuccess = { ok: true; run: ActionRun; source: string; runnerId?: string };
+type ConsumeTokenFailure = {
+  ok: false;
+  error: string;
+  status: number;
+  code: string;
+};
+type ConsumeTokenSuccess = {
+  ok: true;
+  run: ActionRun;
+  source: string;
+  runnerId?: string;
+};
 
 export async function consumeRunnerApprovalToken(
   runId: string,
@@ -2114,62 +1940,86 @@ export async function consumeRunnerApprovalToken(
   const now = nowIso();
   const db = await getDb();
 
-  if (db) {
-    try {
-      const row = await db
-        .prepare(
-          `SELECT token_id, run_id, workspace_id, token_hash, surface, runner_id, expires_at, used_at, created_at
-           FROM runner_approval_tokens
-           WHERE run_id = ? AND token_hash = ?`,
-        )
-        .bind(runId, tokenHash)
-        .first<RunnerApprovalTokenRow>();
+  const row = await db
+    .prepare(
+      `SELECT token_id, run_id, workspace_id, token_hash, surface, runner_id, expires_at, used_at, created_at
+         FROM runner_approval_tokens
+         WHERE run_id = ? AND token_hash = ?`,
+    )
+    .bind(runId, tokenHash)
+    .first<RunnerApprovalTokenRow>();
 
-      if (!row) return { ok: false, error: "Runner approval token is invalid.", status: 401, code: "invalid_runner_token" };
-      const record = mapRunnerApprovalTokenRow(row);
-      if (record.usedAt) return { ok: false, error: "Runner approval token has already been used.", status: 409, code: "runner_token_already_used" };
-      if (Date.parse(record.expiresAt) <= Date.now()) return { ok: false, error: "Runner approval token has expired.", status: 401, code: "expired_runner_token" };
-
-      const run = await getActionRun(runId, record.workspaceId);
-      if (!run) return { ok: false, error: "Run not found.", status: 404, code: "run_not_found" };
-      if (run.status === "blocked" || run.decision === "block") {
-        return { ok: false, error: "Blocked actions cannot be approved.", status: 409, code: "blocked_action_cannot_be_approved" };
-      }
-      if (run.status !== "waiting_approval") {
-        return { ok: false, error: "Run is not waiting for approval.", status: 409, code: "run_not_waiting_approval" };
-      }
-
-      const updateResult = await db
-        .prepare("UPDATE runner_approval_tokens SET used_at = ? WHERE token_id = ? AND used_at IS NULL")
-        .bind(now, record.tokenId)
-        .run();
-      const changes = (updateResult as { meta?: { changes?: number } }).meta?.changes;
-      if (typeof changes === "number" && changes < 1) {
-        return { ok: false, error: "Runner approval token has already been used.", status: 409, code: "runner_token_already_used" };
-      }
-
-      return { ok: true, run, source: `runner_${record.surface}`, runnerId: record.runnerId };
-    } catch (error) {
-      warnD1Fallback("consumeRunnerApprovalToken", error);
-    }
-  }
-
-  const record = getState().runnerApprovalTokens.find((candidate) => candidate.runId === runId && candidate.tokenHash === tokenHash);
-  if (!record) return { ok: false, error: "Runner approval token is invalid.", status: 401, code: "invalid_runner_token" };
-  if (record.usedAt) return { ok: false, error: "Runner approval token has already been used.", status: 409, code: "runner_token_already_used" };
-  if (Date.parse(record.expiresAt) <= Date.now()) return { ok: false, error: "Runner approval token has expired.", status: 401, code: "expired_runner_token" };
+  if (!row)
+    return {
+      ok: false,
+      error: "Runner approval token is invalid.",
+      status: 401,
+      code: "invalid_runner_token",
+    };
+  const record = mapRunnerApprovalTokenRow(row);
+  if (record.usedAt)
+    return {
+      ok: false,
+      error: "Runner approval token has already been used.",
+      status: 409,
+      code: "runner_token_already_used",
+    };
+  if (Date.parse(record.expiresAt) <= Date.now())
+    return {
+      ok: false,
+      error: "Runner approval token has expired.",
+      status: 401,
+      code: "expired_runner_token",
+    };
 
   const run = await getActionRun(runId, record.workspaceId);
-  if (!run) return { ok: false, error: "Run not found.", status: 404, code: "run_not_found" };
+  if (!run)
+    return {
+      ok: false,
+      error: "Run not found.",
+      status: 404,
+      code: "run_not_found",
+    };
   if (run.status === "blocked" || run.decision === "block") {
-    return { ok: false, error: "Blocked actions cannot be approved.", status: 409, code: "blocked_action_cannot_be_approved" };
+    return {
+      ok: false,
+      error: "Blocked actions cannot be approved.",
+      status: 409,
+      code: "blocked_action_cannot_be_approved",
+    };
   }
   if (run.status !== "waiting_approval") {
-    return { ok: false, error: "Run is not waiting for approval.", status: 409, code: "run_not_waiting_approval" };
+    return {
+      ok: false,
+      error: "Run is not waiting for approval.",
+      status: 409,
+      code: "run_not_waiting_approval",
+    };
   }
 
-  record.usedAt = now;
-  return { ok: true, run, source: `runner_${record.surface}`, runnerId: record.runnerId };
+  const updateResult = await db
+    .prepare(
+      "UPDATE runner_approval_tokens SET used_at = ? WHERE token_id = ? AND used_at IS NULL",
+    )
+    .bind(now, record.tokenId)
+    .run();
+  const changes = (updateResult as { meta?: { changes?: number } }).meta
+    ?.changes;
+  if (typeof changes === "number" && changes < 1) {
+    return {
+      ok: false,
+      error: "Runner approval token has already been used.",
+      status: 409,
+      code: "runner_token_already_used",
+    };
+  }
+
+  return {
+    ok: true,
+    run,
+    source: `runner_${record.surface}`,
+    runnerId: record.runnerId,
+  };
 }
 
 /**
@@ -2200,17 +2050,34 @@ export async function continueActionRunAfterApproval(
   if (!run || run.status !== "waiting_approval") return run;
 
   if (run.approvalId) {
-    await resolveApproval(run.approvalId, workspaceId, "approved", resolvedBy, resolvedReason);
+    await resolveApproval(
+      run.approvalId,
+      workspaceId,
+      "approved",
+      resolvedBy,
+      resolvedReason,
+    );
   }
 
-  await appendExecutionEvent(runId, "approval_approved", `Approved by ${resolvedBy}.`, { source: approvalSource, resolvedBy });
-  await notifyWebhooks(workspaceId, "approval.resolved", { runId, status: "approved", resolvedBy, source: approvalSource });
+  await appendExecutionEvent(
+    runId,
+    "approval_approved",
+    `Approved by ${resolvedBy}.`,
+    { source: approvalSource, resolvedBy },
+  );
+  await notifyWebhooks(workspaceId, "approval.resolved", {
+    runId,
+    status: "approved",
+    resolvedBy,
+    source: approvalSource,
+  });
   return updateActionRun(
     runId,
     {
       status: "approved",
       approvalSource,
-      nextStep: "Approval recorded. AgentWing is continuing the guarded execution path.",
+      nextStep:
+        "Approval recorded. AgentWing is continuing the guarded execution path.",
     },
     workspaceId,
   );
@@ -2227,11 +2094,27 @@ export async function rejectActionRun(
   if (!run) return undefined;
 
   if (run.approvalId && run.status === "waiting_approval") {
-    await resolveApproval(run.approvalId, workspaceId, "rejected", resolvedBy, resolvedReason);
+    await resolveApproval(
+      run.approvalId,
+      workspaceId,
+      "rejected",
+      resolvedBy,
+      resolvedReason,
+    );
   }
 
-  await appendExecutionEvent(runId, "approval_rejected", `Rejected by ${resolvedBy}.`, { source: approvalSource, resolvedBy });
-  await notifyWebhooks(workspaceId, "approval.resolved", { runId, status: "rejected", resolvedBy, source: approvalSource });
+  await appendExecutionEvent(
+    runId,
+    "approval_rejected",
+    `Rejected by ${resolvedBy}.`,
+    { source: approvalSource, resolvedBy },
+  );
+  await notifyWebhooks(workspaceId, "approval.resolved", {
+    runId,
+    status: "rejected",
+    resolvedBy,
+    source: approvalSource,
+  });
   return updateActionRun(
     runId,
     {
@@ -2255,104 +2138,84 @@ export async function rejectActionRun(
  * can produce directly, and it silently capped at 500 so the totals were wrong
  * for anyone busy enough to care about them.
  */
-export async function getActionRunStats(workspaceId: string): Promise<ActionRunStats> {
+export async function getActionRunStats(
+  workspaceId: string,
+): Promise<ActionRunStats> {
   requireWorkspace(workspaceId, "getActionRunStats");
   const db = await getDb();
 
-  if (db) {
-    try {
-      const row = await db
-        .prepare(
-          `SELECT
-             COUNT(*) AS total,
-             COALESCE(SUM(status = 'completed'), 0) AS completed,
-             COALESCE(SUM(status = 'blocked'), 0) AS blocked,
-             COALESCE(SUM(status = 'waiting_approval'), 0) AS waiting_approval,
-             COALESCE(SUM(execution_target = 'sandbox'), 0) AS sandbox_runs,
-             COALESCE(SUM(status = 'external_runner_required'), 0) AS external_runner_required
-           FROM action_runs
-           WHERE workspace_id = ?`,
-        )
-        .bind(workspaceId)
-        .first<{
-          total: number;
-          completed: number;
-          blocked: number;
-          waiting_approval: number;
-          sandbox_runs: number;
-          external_runner_required: number;
-        }>();
+  const row = await db
+    .prepare(
+      `SELECT
+           COUNT(*) AS total,
+           COALESCE(SUM(status = 'completed'), 0) AS completed,
+           COALESCE(SUM(status = 'blocked'), 0) AS blocked,
+           COALESCE(SUM(status = 'waiting_approval'), 0) AS waiting_approval,
+           COALESCE(SUM(execution_target = 'sandbox'), 0) AS sandbox_runs,
+           COALESCE(SUM(status = 'external_runner_required'), 0) AS external_runner_required
+         FROM action_runs
+         WHERE workspace_id = ?`,
+    )
+    .bind(workspaceId)
+    .first<{
+      total: number;
+      completed: number;
+      blocked: number;
+      waiting_approval: number;
+      sandbox_runs: number;
+      external_runner_required: number;
+    }>();
 
-      return {
-        total: Number(row?.total ?? 0),
-        completed: Number(row?.completed ?? 0),
-        blocked: Number(row?.blocked ?? 0),
-        waitingApproval: Number(row?.waiting_approval ?? 0),
-        sandboxRuns: Number(row?.sandbox_runs ?? 0),
-        externalRunnerRequired: Number(row?.external_runner_required ?? 0),
-      };
-    } catch (error) {
-      warnD1Fallback("getActionRunStats", error);
-    }
-  }
-
-  const runs = getState().actionRuns.filter((run) => run.workspaceId === workspaceId);
   return {
-    total: runs.length,
-    completed: runs.filter((run) => run.status === "completed").length,
-    blocked: runs.filter((run) => run.status === "blocked").length,
-    waitingApproval: runs.filter((run) => run.status === "waiting_approval").length,
-    sandboxRuns: runs.filter((run) => run.executionTarget === "sandbox").length,
-    externalRunnerRequired: runs.filter((run) => run.status === "external_runner_required").length,
+    total: Number(row?.total ?? 0),
+    completed: Number(row?.completed ?? 0),
+    blocked: Number(row?.blocked ?? 0),
+    waitingApproval: Number(row?.waiting_approval ?? 0),
+    sandboxRuns: Number(row?.sandbox_runs ?? 0),
+    externalRunnerRequired: Number(row?.external_runner_required ?? 0),
   };
 }
 
-export async function getReceiptStats(workspaceId: string): Promise<ReceiptStats> {
+export async function getReceiptStats(
+  workspaceId: string,
+): Promise<ReceiptStats> {
   requireWorkspace(workspaceId, "getReceiptStats");
   const db = await getDb();
-  if (db) {
-    try {
-      // Counted in SQL. This used to list up to 500 whole receipt rows and
-      // filter them in memory, which both moved far more data than necessary
-      // and reported a total that was silently capped at 500.
-      const row = await db
-        .prepare(
-          `SELECT
-             COUNT(*) AS total,
-             COALESCE(SUM(decision = 'block'), 0) AS blocked,
-             COALESCE(SUM(decision = 'approval_required'), 0) AS approval_required,
-             COALESCE(SUM(decision = 'sandbox_required'), 0) AS sandbox_required
-           FROM receipts
-           WHERE workspace_id = ?`,
-        )
-        .bind(workspaceId)
-        .first<{ total: number; blocked: number; approval_required: number; sandbox_required: number }>();
+  // Counted in SQL. This used to list up to 500 whole receipt rows and
+  // filter them in memory, which both moved far more data than necessary
+  // and reported a total that was silently capped at 500.
+  const row = await db
+    .prepare(
+      `SELECT
+           COUNT(*) AS total,
+           COALESCE(SUM(decision = 'block'), 0) AS blocked,
+           COALESCE(SUM(decision = 'approval_required'), 0) AS approval_required,
+           COALESCE(SUM(decision = 'sandbox_required'), 0) AS sandbox_required
+         FROM receipts
+         WHERE workspace_id = ?`,
+    )
+    .bind(workspaceId)
+    .first<{
+      total: number;
+      blocked: number;
+      approval_required: number;
+      sandbox_required: number;
+    }>();
 
-      const total = Number(row?.total ?? 0);
-      return {
-        total,
-        blocked: Number(row?.blocked ?? 0),
-        approvalRequired: Number(row?.approval_required ?? 0),
-        sandboxRequired: Number(row?.sandbox_required ?? 0),
-        receiptsCreated: total,
-      };
-    } catch (error) {
-      warnD1Fallback("getReceiptStats", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  const receipts = getState().receipts.filter((receipt) => receipt.workspaceId === workspaceId);
+  const total = Number(row?.total ?? 0);
   return {
-    total: receipts.length,
-    blocked: receipts.filter((receipt) => receipt.decision === "block").length,
-    approvalRequired: receipts.filter((receipt) => receipt.decision === "approval_required").length,
-    sandboxRequired: receipts.filter((receipt) => receipt.decision === "sandbox_required").length,
-    receiptsCreated: receipts.length,
+    total,
+    blocked: Number(row?.blocked ?? 0),
+    approvalRequired: Number(row?.approval_required ?? 0),
+    sandboxRequired: Number(row?.sandbox_required ?? 0),
+    receiptsCreated: total,
   };
 }
 
-async function getWorkspaceSandboxRow(db: AgentWingD1Database, workspaceId: string) {
+async function getWorkspaceSandboxRow(
+  db: AgentWingD1Database,
+  workspaceId: string,
+) {
   return db
     .prepare(
       `SELECT mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4,
@@ -2364,19 +2227,12 @@ async function getWorkspaceSandboxRow(db: AgentWingD1Database, workspaceId: stri
     .first<SandboxRow & { last_error?: string | null }>();
 }
 
-export async function getSandboxConfigForWorkspace(workspaceId: string): Promise<SandboxProviderConfig> {
+export async function getSandboxConfigForWorkspace(
+  workspaceId: string,
+): Promise<SandboxProviderConfig> {
   const db = await getDb();
-  if (db) {
-    try {
-      const row = await getWorkspaceSandboxRow(db, workspaceId);
-      return publicSandboxConfig(row);
-    } catch (error) {
-      warnD1Fallback("getSandboxConfigForWorkspace", error);
-    }
-  }
-  const { e2bApiKey, ...publicConfig } = getState().sandbox;
-  void e2bApiKey;
-  return publicConfig;
+  const row = await getWorkspaceSandboxRow(db, workspaceId);
+  return publicSandboxConfig(row);
 }
 
 export async function getSandboxConfig(apiKeyId = DEMO_API_KEY) {
@@ -2384,28 +2240,17 @@ export async function getSandboxConfig(apiKeyId = DEMO_API_KEY) {
   if (workspaceId) return getSandboxConfigForWorkspace(workspaceId);
 
   const db = await getDb();
-  if (db) {
-    try {
-      await ensureD1DemoKey(db);
-      const row = await db
-        .prepare(
-          `SELECT mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4,
-                  connected_at, updated_at, last_test_status, last_tested_at
-           FROM sandbox_configs
-           WHERE api_key = ?`,
-        )
-        .bind(apiKeyId)
-        .first<SandboxRow>();
-      return publicSandboxConfig(row);
-    } catch (error) {
-      warnD1Fallback("getSandboxConfig", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
-  }
-
-  const { e2bApiKey, ...publicConfig } = getState().sandbox;
-  void e2bApiKey;
-  return publicConfig;
+  await ensureD1DemoKey(db);
+  const row = await db
+    .prepare(
+      `SELECT mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4,
+                connected_at, updated_at, last_test_status, last_tested_at
+         FROM sandbox_configs
+         WHERE api_key = ?`,
+    )
+    .bind(apiKeyId)
+    .first<SandboxRow>();
+  return publicSandboxConfig(row);
 }
 
 export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
@@ -2414,135 +2259,98 @@ export async function saveE2BKey(apiKey: string, ownerApiKeyId = DEMO_API_KEY) {
     throw new Error("E2B API key is required.");
   }
   if (isPlaceholderE2BKey(trimmed)) {
-    throw new Error("Replace the placeholder with a real E2B API key before saving.");
+    throw new Error(
+      "Replace the placeholder with a real E2B API key before saving.",
+    );
   }
   if (/\s/.test(trimmed)) {
-    throw new Error("Save the raw E2B API key without Authorization, Bearer, or header prefixes.");
+    throw new Error(
+      "Save the raw E2B API key without Authorization, Bearer, or header prefixes.",
+    );
   }
 
   const db = await getDb();
   const workspaceId = workspaceIdFromSandboxOwner(ownerApiKeyId);
-  if (db) {
-    try {
-      const encrypted = await encryptSandboxSecret(trimmed);
-      const prefix = safeE2BKeyPrefix(trimmed) ?? null;
-      const last4 = trimmed.slice(-4);
+  const encrypted = await encryptSandboxSecret(trimmed);
+  const prefix = safeE2BKeyPrefix(trimmed) ?? null;
+  const last4 = trimmed.slice(-4);
 
-      if (workspaceId) {
-        // Use workspace_sandbox_configs — no FK constraint on api_keys
-        await db
-          .prepare(
-            `INSERT INTO workspace_sandbox_configs
-             (workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
-             VALUES (?, 'e2b_byok', 1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(workspace_id) DO UPDATE SET
-               mode = 'e2b_byok',
-               e2b_key_saved = 1,
-               e2b_key_prefix = excluded.e2b_key_prefix,
-               e2b_key_last4 = excluded.e2b_key_last4,
-               e2b_key_encrypted = excluded.e2b_key_encrypted,
-               connected_at = COALESCE(workspace_sandbox_configs.connected_at, excluded.connected_at),
-               updated_at = excluded.updated_at,
-               last_error = NULL`,
-          )
-          .bind(workspaceId, prefix, last4, encrypted)
-          .run();
-      } else {
-        await ensureD1DemoKey(db);
-        await db
-          .prepare(
-            `INSERT INTO sandbox_configs
-             (api_key, workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
-             VALUES (?, NULL, 'e2b_byok', 1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(api_key) DO UPDATE SET
-               mode = 'e2b_byok',
-               e2b_key_saved = 1,
-               e2b_key_prefix = excluded.e2b_key_prefix,
-               e2b_key_last4 = excluded.e2b_key_last4,
-               e2b_key_encrypted = excluded.e2b_key_encrypted,
-               connected_at = COALESCE(sandbox_configs.connected_at, excluded.connected_at),
-               updated_at = excluded.updated_at`,
-          )
-          .bind(ownerApiKeyId, prefix, last4, encrypted)
-          .run();
-      }
-
-      return getSandboxConfig(ownerApiKeyId);
-    } catch (error) {
-      warnD1Fallback("saveE2BKey", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
+  if (workspaceId) {
+    // Use workspace_sandbox_configs — no FK constraint on api_keys
+    await db
+      .prepare(
+        `INSERT INTO workspace_sandbox_configs
+           (workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
+           VALUES (?, 'e2b_byok', 1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           ON CONFLICT(workspace_id) DO UPDATE SET
+             mode = 'e2b_byok',
+             e2b_key_saved = 1,
+             e2b_key_prefix = excluded.e2b_key_prefix,
+             e2b_key_last4 = excluded.e2b_key_last4,
+             e2b_key_encrypted = excluded.e2b_key_encrypted,
+             connected_at = COALESCE(workspace_sandbox_configs.connected_at, excluded.connected_at),
+             updated_at = excluded.updated_at,
+             last_error = NULL`,
+      )
+      .bind(workspaceId, prefix, last4, encrypted)
+      .run();
+  } else {
+    await ensureD1DemoKey(db);
+    await db
+      .prepare(
+        `INSERT INTO sandbox_configs
+           (api_key, workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
+           VALUES (?, NULL, 'e2b_byok', 1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           ON CONFLICT(api_key) DO UPDATE SET
+             mode = 'e2b_byok',
+             e2b_key_saved = 1,
+             e2b_key_prefix = excluded.e2b_key_prefix,
+             e2b_key_last4 = excluded.e2b_key_last4,
+             e2b_key_encrypted = excluded.e2b_key_encrypted,
+             connected_at = COALESCE(sandbox_configs.connected_at, excluded.connected_at),
+             updated_at = excluded.updated_at`,
+      )
+      .bind(ownerApiKeyId, prefix, last4, encrypted)
+      .run();
   }
-
-  const state = getState();
-  state.sandbox = {
-    ...state.sandbox,
-    provider: "e2b-byok",
-    connected: true,
-    mode: "e2b_byok",
-    byok: true,
-    sandboxMode: "BYOK",
-    e2bApiKey: trimmed,
-    keyPrefix: safeE2BKeyPrefix(trimmed),
-    keyLast4: trimmed.slice(-4),
-    createdAt: state.sandbox.createdAt ?? nowIso(),
-    updatedAt: nowIso(),
-    runtimeExecutionEnabled: true,
-    e2bKeySaved: true,
-    e2bKeyLast4: trimmed.slice(-4),
-    e2bKeyUpdatedAt: nowIso(),
-  };
 
   return getSandboxConfig(ownerApiKeyId);
 }
 
-export async function recordE2BTestResult(status: SandboxTestStatus, ownerApiKeyId = DEMO_API_KEY, lastError?: string) {
+export async function recordE2BTestResult(
+  status: SandboxTestStatus,
+  ownerApiKeyId = DEMO_API_KEY,
+  lastError?: string,
+) {
   const db = await getDb();
   const workspaceId = workspaceIdFromSandboxOwner(ownerApiKeyId);
-  if (db) {
-    try {
-      if (workspaceId) {
-        await db
-          .prepare(
-            `INSERT INTO workspace_sandbox_configs
-             (workspace_id, mode, e2b_key_saved, last_test_status, last_tested_at, last_error)
-             VALUES (?, 'none', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?)
-             ON CONFLICT(workspace_id) DO UPDATE SET
-               last_test_status = excluded.last_test_status,
-               last_tested_at = excluded.last_tested_at,
-               last_error = CASE WHEN excluded.last_error IS NOT NULL THEN excluded.last_error ELSE workspace_sandbox_configs.last_error END`,
-          )
-          .bind(workspaceId, status, lastError ?? null)
-          .run();
-      } else {
-        await ensureD1DemoKey(db);
-        await db
-          .prepare(
-            `INSERT INTO sandbox_configs
-             (api_key, workspace_id, mode, e2b_key_saved, last_test_status, last_tested_at)
-             VALUES (?, NULL, 'none', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(api_key) DO UPDATE SET
-               last_test_status = excluded.last_test_status,
-               last_tested_at = excluded.last_tested_at`,
-          )
-          .bind(ownerApiKeyId, status)
-          .run();
-      }
-
-      return getSandboxConfig(ownerApiKeyId);
-    } catch (error) {
-      warnD1Fallback("recordE2BTestResult", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
+  if (workspaceId) {
+    await db
+      .prepare(
+        `INSERT INTO workspace_sandbox_configs
+           (workspace_id, mode, e2b_key_saved, last_test_status, last_tested_at, last_error)
+           VALUES (?, 'none', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?)
+           ON CONFLICT(workspace_id) DO UPDATE SET
+             last_test_status = excluded.last_test_status,
+             last_tested_at = excluded.last_tested_at,
+             last_error = CASE WHEN excluded.last_error IS NOT NULL THEN excluded.last_error ELSE workspace_sandbox_configs.last_error END`,
+      )
+      .bind(workspaceId, status, lastError ?? null)
+      .run();
+  } else {
+    await ensureD1DemoKey(db);
+    await db
+      .prepare(
+        `INSERT INTO sandbox_configs
+           (api_key, workspace_id, mode, e2b_key_saved, last_test_status, last_tested_at)
+           VALUES (?, NULL, 'none', 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           ON CONFLICT(api_key) DO UPDATE SET
+             last_test_status = excluded.last_test_status,
+             last_tested_at = excluded.last_tested_at`,
+      )
+      .bind(ownerApiKeyId, status)
+      .run();
   }
-
-  const state = getState();
-  const testedAt = nowIso();
-  state.sandbox = {
-    ...state.sandbox,
-    lastTestStatus: status,
-    lastTestedAt: testedAt,
-  };
 
   return getSandboxConfig(ownerApiKeyId);
 }
@@ -2550,70 +2358,47 @@ export async function recordE2BTestResult(status: SandboxTestStatus, ownerApiKey
 export async function removeE2BKey(ownerApiKeyId = DEMO_API_KEY) {
   const db = await getDb();
   const workspaceId = workspaceIdFromSandboxOwner(ownerApiKeyId);
-  if (db) {
-    try {
-      if (workspaceId) {
-        await db
-          .prepare(
-            `INSERT INTO workspace_sandbox_configs
-             (workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at, last_test_status, last_tested_at, last_error)
-             VALUES (?, 'none', 0, NULL, NULL, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL, NULL, NULL)
-             ON CONFLICT(workspace_id) DO UPDATE SET
-               mode = 'none',
-               e2b_key_saved = 0,
-               e2b_key_prefix = NULL,
-               e2b_key_last4 = NULL,
-               e2b_key_encrypted = NULL,
-               connected_at = NULL,
-               last_test_status = NULL,
-               last_tested_at = NULL,
-               last_error = NULL,
-               updated_at = excluded.updated_at`,
-          )
-          .bind(workspaceId)
-          .run();
-      } else {
-        await ensureD1DemoKey(db);
-        await db
-          .prepare(
-            `INSERT INTO sandbox_configs
-             (api_key, workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
-             VALUES (?, NULL, 'none', 0, NULL, NULL, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(api_key) DO UPDATE SET
-               mode = 'none',
-               e2b_key_saved = 0,
-               e2b_key_prefix = NULL,
-               e2b_key_last4 = NULL,
-               e2b_key_encrypted = NULL,
-               connected_at = NULL,
-               last_test_status = NULL,
-               last_tested_at = NULL,
-               updated_at = excluded.updated_at`,
-          )
-          .bind(ownerApiKeyId)
-          .run();
-      }
-
-      return getSandboxConfig(ownerApiKeyId);
-    } catch (error) {
-      warnD1Fallback("removeE2BKey", error);
-      // Fall back to memory if D1 has not been migrated yet.
-    }
+  if (workspaceId) {
+    await db
+      .prepare(
+        `INSERT INTO workspace_sandbox_configs
+           (workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at, last_test_status, last_tested_at, last_error)
+           VALUES (?, 'none', 0, NULL, NULL, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL, NULL, NULL)
+           ON CONFLICT(workspace_id) DO UPDATE SET
+             mode = 'none',
+             e2b_key_saved = 0,
+             e2b_key_prefix = NULL,
+             e2b_key_last4 = NULL,
+             e2b_key_encrypted = NULL,
+             connected_at = NULL,
+             last_test_status = NULL,
+             last_tested_at = NULL,
+             last_error = NULL,
+             updated_at = excluded.updated_at`,
+      )
+      .bind(workspaceId)
+      .run();
+  } else {
+    await ensureD1DemoKey(db);
+    await db
+      .prepare(
+        `INSERT INTO sandbox_configs
+           (api_key, workspace_id, mode, e2b_key_saved, e2b_key_prefix, e2b_key_last4, e2b_key_encrypted, connected_at, updated_at)
+           VALUES (?, NULL, 'none', 0, NULL, NULL, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           ON CONFLICT(api_key) DO UPDATE SET
+             mode = 'none',
+             e2b_key_saved = 0,
+             e2b_key_prefix = NULL,
+             e2b_key_last4 = NULL,
+             e2b_key_encrypted = NULL,
+             connected_at = NULL,
+             last_test_status = NULL,
+             last_tested_at = NULL,
+             updated_at = excluded.updated_at`,
+      )
+      .bind(ownerApiKeyId)
+      .run();
   }
-
-  const state = getState();
-  const updatedAt = nowIso();
-  state.sandbox = {
-    provider: "e2b-byok",
-    connected: false,
-    mode: "none",
-    byok: true,
-    sandboxMode: "none",
-    runtimeExecutionEnabled: false,
-    e2bKeySaved: false,
-    updatedAt,
-    e2bKeyUpdatedAt: updatedAt,
-  };
 
   return getSandboxConfig(ownerApiKeyId);
 }
@@ -2635,7 +2420,10 @@ async function getD1E2BApiKey(db: AgentWingD1Database, apiKeyId: string) {
   return decryptSandboxSecret(row.e2b_key_encrypted);
 }
 
-async function getD1WorkspaceE2BApiKey(db: AgentWingD1Database, workspaceId: string) {
+async function getD1WorkspaceE2BApiKey(
+  db: AgentWingD1Database,
+  workspaceId: string,
+) {
   const row = await db
     .prepare(
       "SELECT mode, e2b_key_saved, e2b_key_encrypted FROM workspace_sandbox_configs WHERE workspace_id = ?",
@@ -2647,79 +2435,57 @@ async function getD1WorkspaceE2BApiKey(db: AgentWingD1Database, workspaceId: str
   return decryptSandboxSecret(row.e2b_key_encrypted);
 }
 
-export async function getE2BApiKeyForExecution(apiKeyId = DEMO_API_KEY, workspaceId?: string) {
+export async function getE2BApiKeyForExecution(
+  apiKeyId = DEMO_API_KEY,
+  workspaceId?: string,
+) {
   const db = await getDb();
-  let useMemoryFallback = !db;
 
-  if (db) {
-    try {
-      // Prefer workspace_sandbox_configs for real users
-      if (workspaceId) {
-        const workspaceKey = await getD1WorkspaceE2BApiKey(db, workspaceId);
-        if (workspaceKey) return workspaceKey;
-      }
-
-      // Also check via synthetic owner key path
-      const derivedWorkspaceId = workspaceIdFromSandboxOwner(apiKeyId);
-      if (derivedWorkspaceId && derivedWorkspaceId !== workspaceId) {
-        const key = await getD1WorkspaceE2BApiKey(db, derivedWorkspaceId);
-        if (key) return key;
-      }
-
-      if (apiKeyId !== DEMO_API_KEY) {
-        await ensureD1DemoKey(db);
-        const projectKey = await getD1E2BApiKey(db, apiKeyId);
-        if (projectKey) return projectKey;
-      }
-
-      const demoKey = await getD1E2BApiKey(db, DEMO_API_KEY);
-      if (demoKey) return demoKey;
-    } catch (error) {
-      warnD1Fallback("getE2BApiKeyForExecution", error);
-      useMemoryFallback = true;
-      // Fall back to memory/env in local development if D1 is not ready.
-    }
+  // Prefer workspace_sandbox_configs for real users
+  if (workspaceId) {
+    const workspaceKey = await getD1WorkspaceE2BApiKey(db, workspaceId);
+    if (workspaceKey) return workspaceKey;
   }
 
-  if (useMemoryFallback) {
-    const devStoredKey = getState().sandbox.e2bApiKey?.trim();
-    if (devStoredKey && !isPlaceholderE2BKey(devStoredKey)) return devStoredKey;
+  // Also check via synthetic owner key path
+  const derivedWorkspaceId = workspaceIdFromSandboxOwner(apiKeyId);
+  if (derivedWorkspaceId && derivedWorkspaceId !== workspaceId) {
+    const key = await getD1WorkspaceE2BApiKey(db, derivedWorkspaceId);
+    if (key) return key;
   }
 
-  const envKey = process.env.E2B_API_KEY?.trim();
-  return envKey && !isPlaceholderE2BKey(envKey) ? envKey : undefined;
+  if (apiKeyId !== DEMO_API_KEY) {
+    await ensureD1DemoKey(db);
+    const projectKey = await getD1E2BApiKey(db, apiKeyId);
+    if (projectKey) return projectKey;
+  }
+
+  const demoKey = await getD1E2BApiKey(db, DEMO_API_KEY);
+  if (demoKey) return demoKey;
 }
 
-export async function revokeApiKey(apiKeyId: string, workspaceId: string): Promise<boolean> {
+export async function revokeApiKey(
+  apiKeyId: string,
+  workspaceId: string,
+): Promise<boolean> {
   requireWorkspace(workspaceId, "revokeApiKey");
   const db = await getDb();
-  if (db) {
-    try {
-      const result = await db
-        .prepare(
-          "UPDATE api_keys SET revoked_at = ? WHERE api_key_id = ? AND workspace_id = ? AND revoked_at IS NULL",
-        )
-        .bind(nowIso(), apiKeyId, workspaceId)
-        .run();
-      // `success` is true for any statement that executed, including one that
-      // matched nothing. Revoking a key after an incident must not report
-      // success for a wrong id, an already-revoked key, or another tenant's key.
-      return (result.meta?.changes ?? 0) > 0;
-    } catch (error) {
-      warnD1Fallback("revokeApiKey", error);
-    }
-  }
-
-  const state = getState();
-  const record = state.apiKeysById[apiKeyId];
-  if (record && record.workspaceId === workspaceId && !record.revokedAt) {
-    record.revokedAt = nowIso();
-    return true;
-  }
-  return false;
+  const result = await db
+    .prepare(
+      "UPDATE api_keys SET revoked_at = ? WHERE api_key_id = ? AND workspace_id = ? AND revoked_at IS NULL",
+    )
+    .bind(nowIso(), apiKeyId, workspaceId)
+    .run();
+  // `success` is true for any statement that executed, including one that
+  // matched nothing. Revoking a key after an incident must not report
+  // success for a wrong id, an already-revoked key, or another tenant's key.
+  return (result.meta?.changes ?? 0) > 0;
 }
 
-export async function listCustomPolicies(workspaceId: string, projectId?: string): Promise<import("./agentwingTypes").CustomPolicy[]> {
+export async function listCustomPolicies(
+  workspaceId: string,
+  projectId?: string,
+): Promise<import("./agentwingTypes").CustomPolicy[]> {
   const db = await getDb();
   if (db) {
     try {
@@ -2789,11 +2555,21 @@ export async function createCustomPolicy(
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
       )
       .bind(
-        policyId, workspaceId, data.projectId ?? null, data.name,
-        data.description ?? null, data.actionType ?? null, data.tool ?? null,
-        data.targetPattern ?? null, data.commandPattern ?? null,
-        data.decision, data.risk, data.priority ?? 100,
-        data.feedback ?? null, now, now,
+        policyId,
+        workspaceId,
+        data.projectId ?? null,
+        data.name,
+        data.description ?? null,
+        data.actionType ?? null,
+        data.tool ?? null,
+        data.targetPattern ?? null,
+        data.commandPattern ?? null,
+        data.decision,
+        data.risk,
+        data.priority ?? 100,
+        data.feedback ?? null,
+        now,
+        now,
       )
       .run();
   }
@@ -2839,21 +2615,56 @@ export async function updateCustomPolicy(
   const now = nowIso();
   const sets: string[] = ["updated_at = ?"];
   const values: unknown[] = [now];
-  if (data.name !== undefined) { sets.push("name = ?"); values.push(data.name); }
-  if (data.description !== undefined) { sets.push("description = ?"); values.push(data.description); }
-  if (data.actionType !== undefined) { sets.push("action_type = ?"); values.push(data.actionType || null); }
-  if (data.tool !== undefined) { sets.push("tool = ?"); values.push(data.tool || null); }
-  if (data.targetPattern !== undefined) { sets.push("target_pattern = ?"); values.push(data.targetPattern || null); }
-  if (data.commandPattern !== undefined) { sets.push("command_pattern = ?"); values.push(data.commandPattern || null); }
-  if (data.decision !== undefined) { sets.push("decision = ?"); values.push(data.decision); }
-  if (data.risk !== undefined) { sets.push("risk = ?"); values.push(data.risk); }
-  if (data.priority !== undefined) { sets.push("priority = ?"); values.push(data.priority); }
-  if (data.enabled !== undefined) { sets.push("enabled = ?"); values.push(data.enabled ? 1 : 0); }
-  if (data.feedback !== undefined) { sets.push("feedback = ?"); values.push(data.feedback || null); }
+  if (data.name !== undefined) {
+    sets.push("name = ?");
+    values.push(data.name);
+  }
+  if (data.description !== undefined) {
+    sets.push("description = ?");
+    values.push(data.description);
+  }
+  if (data.actionType !== undefined) {
+    sets.push("action_type = ?");
+    values.push(data.actionType || null);
+  }
+  if (data.tool !== undefined) {
+    sets.push("tool = ?");
+    values.push(data.tool || null);
+  }
+  if (data.targetPattern !== undefined) {
+    sets.push("target_pattern = ?");
+    values.push(data.targetPattern || null);
+  }
+  if (data.commandPattern !== undefined) {
+    sets.push("command_pattern = ?");
+    values.push(data.commandPattern || null);
+  }
+  if (data.decision !== undefined) {
+    sets.push("decision = ?");
+    values.push(data.decision);
+  }
+  if (data.risk !== undefined) {
+    sets.push("risk = ?");
+    values.push(data.risk);
+  }
+  if (data.priority !== undefined) {
+    sets.push("priority = ?");
+    values.push(data.priority);
+  }
+  if (data.enabled !== undefined) {
+    sets.push("enabled = ?");
+    values.push(data.enabled ? 1 : 0);
+  }
+  if (data.feedback !== undefined) {
+    sets.push("feedback = ?");
+    values.push(data.feedback || null);
+  }
   values.push(policyId, workspaceId);
   try {
     const result = await db
-      .prepare(`UPDATE custom_policies SET ${sets.join(", ")} WHERE policy_id = ? AND workspace_id = ?`)
+      .prepare(
+        `UPDATE custom_policies SET ${sets.join(", ")} WHERE policy_id = ? AND workspace_id = ?`,
+      )
       .bind(...values)
       .run();
     return Boolean(result.success);
@@ -2862,12 +2673,17 @@ export async function updateCustomPolicy(
   }
 }
 
-export async function deleteCustomPolicy(policyId: string, workspaceId: string): Promise<boolean> {
+export async function deleteCustomPolicy(
+  policyId: string,
+  workspaceId: string,
+): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
   try {
     const result = await db
-      .prepare("DELETE FROM custom_policies WHERE policy_id = ? AND workspace_id = ?")
+      .prepare(
+        "DELETE FROM custom_policies WHERE policy_id = ? AND workspace_id = ?",
+      )
       .bind(policyId, workspaceId)
       .run();
     return Boolean(result.success);
@@ -2895,10 +2711,16 @@ export function policyMatches(
   policy: import("./agentwingTypes").CustomPolicy,
   action: import("./agentwingTypes").AgentAction,
 ): boolean {
-  const hasCriterion = Boolean(policy.actionType || policy.tool || policy.targetPattern || policy.commandPattern);
+  const hasCriterion = Boolean(
+    policy.actionType ||
+    policy.tool ||
+    policy.targetPattern ||
+    policy.commandPattern,
+  );
   if (!hasCriterion) return false;
 
-  if (policy.actionType && policy.actionType !== action.actionType) return false;
+  if (policy.actionType && policy.actionType !== action.actionType)
+    return false;
 
   if (policy.tool) {
     const actionTool = action.tool?.toLowerCase();
@@ -2907,7 +2729,8 @@ export function policyMatches(
   }
 
   if (!criterionMatches(policy.targetPattern, action.target)) return false;
-  if (!criterionMatches(policy.commandPattern, action.command ?? action.target)) return false;
+  if (!criterionMatches(policy.commandPattern, action.command ?? action.target))
+    return false;
 
   return true;
 }
@@ -2918,7 +2741,9 @@ export async function matchCustomPolicy(
   projectId?: string,
 ): Promise<import("./agentwingTypes").CustomPolicy | undefined> {
   const policies = await listCustomPolicies(workspaceId, projectId);
-  const enabled = policies.filter((p) => p.enabled).sort((a, b) => a.priority - b.priority);
+  const enabled = policies
+    .filter((p) => p.enabled)
+    .sort((a, b) => a.priority - b.priority);
   return enabled.find((p) => policyMatches(p, action));
 }
 
@@ -2943,11 +2768,16 @@ export async function revokeAllApiKeys(workspaceId: string): Promise<number> {
 }
 
 /** Invalidate every session belonging to a user, immediately. */
-export async function deleteAllSessionsForUser(userId: string): Promise<number> {
+export async function deleteAllSessionsForUser(
+  userId: string,
+): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
   try {
-    const result = await db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
+    const result = await db
+      .prepare("DELETE FROM sessions WHERE user_id = ?")
+      .bind(userId)
+      .run();
     return result.meta?.changes ?? 0;
   } catch (error) {
     warnD1Fallback("deleteAllSessionsForUser", error);
@@ -2955,82 +2785,64 @@ export async function deleteAllSessionsForUser(userId: string): Promise<number> 
   }
 }
 
-export async function requestAccountDeletion(userId: string, workspaceId?: string) {
+export async function requestAccountDeletion(
+  userId: string,
+  workspaceId?: string,
+) {
   const now = nowIso();
   const db = await getDb();
 
-  if (db) {
-    try {
-      const userColumns = await getD1TableColumns(db, "users");
-      const userSets: string[] = [];
-      const userValues: unknown[] = [];
+  const userColumns = await getD1TableColumns(db, "users");
+  const userSets: string[] = [];
+  const userValues: unknown[] = [];
 
-      if (userColumns.has("status")) {
-        userSets.push("status = ?");
-        userValues.push("deletion_requested");
-      }
-      if (userColumns.has("delete_requested_at")) {
-        userSets.push("delete_requested_at = COALESCE(delete_requested_at, ?)");
-        userValues.push(now);
-      }
-
-      if (userSets.length > 0) {
-        userValues.push(userId);
-        await db
-          .prepare(
-            `UPDATE users
-             SET ${userSets.join(", ")}
-             WHERE user_id = ?${userColumns.has("deleted_at") ? " AND deleted_at IS NULL" : ""}`,
-          )
-          .bind(...userValues)
-          .run();
-      }
-
-      if (workspaceId) {
-        const workspaceColumns = await getD1TableColumns(db, "workspaces");
-        const workspaceSets: string[] = [];
-        const workspaceValues: unknown[] = [];
-
-        if (workspaceColumns.has("status")) {
-          workspaceSets.push("status = ?");
-          workspaceValues.push("deletion_requested");
-        }
-        if (workspaceColumns.has("delete_requested_at")) {
-          workspaceSets.push("delete_requested_at = COALESCE(delete_requested_at, ?)");
-          workspaceValues.push(now);
-        }
-
-        if (workspaceSets.length > 0) {
-          workspaceValues.push(workspaceId, userId);
-          await db
-            .prepare(
-              `UPDATE workspaces
-               SET ${workspaceSets.join(", ")}
-               WHERE workspace_id = ? AND owner_user_id = ?${workspaceColumns.has("deleted_at") ? " AND deleted_at IS NULL" : ""}`,
-            )
-            .bind(...workspaceValues)
-            .run();
-        }
-      }
-
-      return { userId, workspaceId, deleteRequestedAt: now };
-    } catch (error) {
-      warnD1Fallback("requestAccountDeletion", error);
-    }
+  if (userColumns.has("status")) {
+    userSets.push("status = ?");
+    userValues.push("deletion_requested");
+  }
+  if (userColumns.has("delete_requested_at")) {
+    userSets.push("delete_requested_at = COALESCE(delete_requested_at, ?)");
+    userValues.push(now);
   }
 
-  const state = getState();
-  const user = state.usersById[userId];
-  if (user) {
-    user.status = "deletion_requested";
-    user.deleteRequestedAt ??= now;
+  if (userSets.length > 0) {
+    userValues.push(userId);
+    await db
+      .prepare(
+        `UPDATE users
+           SET ${userSets.join(", ")}
+           WHERE user_id = ?${userColumns.has("deleted_at") ? " AND deleted_at IS NULL" : ""}`,
+      )
+      .bind(...userValues)
+      .run();
   }
 
   if (workspaceId) {
-    const workspace = state.workspacesById[workspaceId];
-    if (workspace?.ownerUserId === userId) {
-      workspace.status = "deletion_requested";
-      workspace.deleteRequestedAt ??= now;
+    const workspaceColumns = await getD1TableColumns(db, "workspaces");
+    const workspaceSets: string[] = [];
+    const workspaceValues: unknown[] = [];
+
+    if (workspaceColumns.has("status")) {
+      workspaceSets.push("status = ?");
+      workspaceValues.push("deletion_requested");
+    }
+    if (workspaceColumns.has("delete_requested_at")) {
+      workspaceSets.push(
+        "delete_requested_at = COALESCE(delete_requested_at, ?)",
+      );
+      workspaceValues.push(now);
+    }
+
+    if (workspaceSets.length > 0) {
+      workspaceValues.push(workspaceId, userId);
+      await db
+        .prepare(
+          `UPDATE workspaces
+             SET ${workspaceSets.join(", ")}
+             WHERE workspace_id = ? AND owner_user_id = ?${workspaceColumns.has("deleted_at") ? " AND deleted_at IS NULL" : ""}`,
+        )
+        .bind(...workspaceValues)
+        .run();
     }
   }
 
@@ -3083,7 +2895,13 @@ function mapApprovalRow(row: ApprovalRow): ApprovalRecord {
     workspaceId: row.workspace_id,
     projectId: row.project_id ?? undefined,
     receiptId: row.receipt_id ?? undefined,
-    actionJson: (() => { try { return JSON.parse(row.action_json); } catch { return {}; } })(),
+    actionJson: (() => {
+      try {
+        return JSON.parse(row.action_json);
+      } catch {
+        return {};
+      }
+    })(),
     status: row.status as ApprovalRecord["status"],
     decision: row.decision,
     risk: row.risk,
@@ -3140,10 +2958,19 @@ export async function createApproval(opts: {
            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
-          approvalId, opts.workspaceId, opts.projectId ?? null, opts.receiptId ?? null,
-          JSON.stringify(record.actionJson), opts.decision, opts.risk,
-          opts.policy ?? null, opts.reason ?? null, opts.requestedByAgent ?? null,
-          now, now, expiresAt,
+          approvalId,
+          opts.workspaceId,
+          opts.projectId ?? null,
+          opts.receiptId ?? null,
+          JSON.stringify(record.actionJson),
+          opts.decision,
+          opts.risk,
+          opts.policy ?? null,
+          opts.reason ?? null,
+          opts.requestedByAgent ?? null,
+          now,
+          now,
+          expiresAt,
         )
         .run();
     } catch {
@@ -3153,15 +2980,23 @@ export async function createApproval(opts: {
   return record;
 }
 
-export async function listApprovals(workspaceId: string, status?: string): Promise<ApprovalRecord[]> {
+export async function listApprovals(
+  workspaceId: string,
+  status?: string,
+): Promise<ApprovalRecord[]> {
   const db = await getDb();
   if (!db) return [];
   try {
     const conditions = ["workspace_id = ?"];
     const values: string[] = [workspaceId];
-    if (status) { conditions.push("status = ?"); values.push(status); }
+    if (status) {
+      conditions.push("status = ?");
+      values.push(status);
+    }
     const result = await db
-      .prepare(`SELECT * FROM approvals WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT 100`)
+      .prepare(
+        `SELECT * FROM approvals WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT 100`,
+      )
       .bind(...values)
       .all<ApprovalRow>();
     return (result.results ?? []).map(mapApprovalRow);
@@ -3203,7 +3038,15 @@ export async function resolveApproval(
          SET status = ?, resolved_at = ?, updated_at = ?, resolved_by = ?, resolved_reason = ?
          WHERE approval_id = ? AND workspace_id = ? AND status = 'pending'`,
       )
-      .bind(status, now, now, resolvedBy, resolvedReason ?? null, approvalId, workspaceId)
+      .bind(
+        status,
+        now,
+        now,
+        resolvedBy,
+        resolvedReason ?? null,
+        approvalId,
+        workspaceId,
+      )
       .run();
     return (result.meta?.changes ?? 0) > 0;
   } catch (error) {
@@ -3234,46 +3077,77 @@ export async function getAdminStats() {
     const hasUserDeleteRequestedAt = userColumns.has("delete_requested_at");
     const hasUserDeletedAt = userColumns.has("deleted_at");
     const hasWorkspaceStatus = workspaceColumns.has("status");
-    const hasWorkspaceDeleteRequestedAt = workspaceColumns.has("delete_requested_at");
+    const hasWorkspaceDeleteRequestedAt = workspaceColumns.has(
+      "delete_requested_at",
+    );
     const hasWorkspaceDeletedAt = workspaceColumns.has("deleted_at");
 
-    const userActiveWhere = [
-      hasUserStatus ? "COALESCE(status, 'active') = 'active'" : undefined,
-      hasUserDeleteRequestedAt ? "delete_requested_at IS NULL" : undefined,
-      hasUserDeletedAt ? "deleted_at IS NULL" : undefined,
-    ].filter(Boolean).join(" AND ") || "1 = 1";
+    const userActiveWhere =
+      [
+        hasUserStatus ? "COALESCE(status, 'active') = 'active'" : undefined,
+        hasUserDeleteRequestedAt ? "delete_requested_at IS NULL" : undefined,
+        hasUserDeletedAt ? "deleted_at IS NULL" : undefined,
+      ]
+        .filter(Boolean)
+        .join(" AND ") || "1 = 1";
     const userDeletionRequestedWhere = [
       [
         hasUserStatus ? "status = 'deletion_requested'" : undefined,
-        hasUserDeleteRequestedAt ? "delete_requested_at IS NOT NULL" : undefined,
-      ].filter(Boolean).join(" OR "),
+        hasUserDeleteRequestedAt
+          ? "delete_requested_at IS NOT NULL"
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(" OR "),
       hasUserDeletedAt ? "deleted_at IS NULL" : undefined,
-    ].filter(Boolean).map((part) => `(${part})`).join(" AND ");
+    ]
+      .filter(Boolean)
+      .map((part) => `(${part})`)
+      .join(" AND ");
     const userDeletedWhere = [
       hasUserStatus ? "status = 'deleted'" : undefined,
       hasUserDeletedAt ? "deleted_at IS NOT NULL" : undefined,
-    ].filter(Boolean).join(" OR ");
+    ]
+      .filter(Boolean)
+      .join(" OR ");
 
-    const workspaceActiveWhere = [
-      hasWorkspaceStatus ? "COALESCE(status, 'active') = 'active'" : undefined,
-      hasWorkspaceDeleteRequestedAt ? "delete_requested_at IS NULL" : undefined,
-      hasWorkspaceDeletedAt ? "deleted_at IS NULL" : undefined,
-    ].filter(Boolean).join(" AND ") || "1 = 1";
+    const workspaceActiveWhere =
+      [
+        hasWorkspaceStatus
+          ? "COALESCE(status, 'active') = 'active'"
+          : undefined,
+        hasWorkspaceDeleteRequestedAt
+          ? "delete_requested_at IS NULL"
+          : undefined,
+        hasWorkspaceDeletedAt ? "deleted_at IS NULL" : undefined,
+      ]
+        .filter(Boolean)
+        .join(" AND ") || "1 = 1";
     const workspaceDeletionRequestedWhere = [
       [
         hasWorkspaceStatus ? "status = 'deletion_requested'" : undefined,
-        hasWorkspaceDeleteRequestedAt ? "delete_requested_at IS NOT NULL" : undefined,
-      ].filter(Boolean).join(" OR "),
+        hasWorkspaceDeleteRequestedAt
+          ? "delete_requested_at IS NOT NULL"
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(" OR "),
       hasWorkspaceDeletedAt ? "deleted_at IS NULL" : undefined,
-    ].filter(Boolean).map((part) => `(${part})`).join(" AND ");
+    ]
+      .filter(Boolean)
+      .map((part) => `(${part})`)
+      .join(" AND ");
     const workspaceDeletedWhere = [
       hasWorkspaceStatus ? "status = 'deleted'" : undefined,
       hasWorkspaceDeletedAt ? "deleted_at IS NOT NULL" : undefined,
-    ].filter(Boolean).join(" OR ");
+    ]
+      .filter(Boolean)
+      .join(" OR ");
 
     const latestDeletionRequestsQuery = userDeletionRequestedWhere
-      ? db.prepare(
-          `SELECT user_id, email, name, image, provider, provider_account_id,
+      ? db
+          .prepare(
+            `SELECT user_id, email, name, image, provider, provider_account_id,
                   ${hasUserStatus ? "status" : "'deletion_requested' AS status"},
                   ${hasUserDeleteRequestedAt ? "delete_requested_at" : "NULL AS delete_requested_at"},
                   ${hasUserDeletedAt ? "deleted_at" : "NULL AS deleted_at"},
@@ -3282,66 +3156,168 @@ export async function getAdminStats() {
            WHERE ${userDeletionRequestedWhere}
            ORDER BY ${hasUserDeleteRequestedAt ? "delete_requested_at" : "created_at"} DESC
            LIMIT 10`,
-        ).all<UserRow>()
+          )
+          .all<UserRow>()
       : Promise.resolve({ success: true, results: [] as UserRow[] });
 
     const [
-      users, activeUsers, deletionRequestedUsers, deletedUsers,
-      workspaces, activeWorkspaces, deletionRequestedWorkspaces, deletedWorkspaces,
-      projects, activeApiKeys, revokedApiKeys, events,
-      loginsToday, apiCallsToday, blockedToday, approvalToday, sandboxToday, sandboxRunsToday, sandboxFailsToday,
-      errorsToday, recentEvents, latestUsers, latestDeletionRequests, deletionRequestEvents, latestReceipts
+      users,
+      activeUsers,
+      deletionRequestedUsers,
+      deletedUsers,
+      workspaces,
+      activeWorkspaces,
+      deletionRequestedWorkspaces,
+      deletedWorkspaces,
+      projects,
+      activeApiKeys,
+      revokedApiKeys,
+      events,
+      loginsToday,
+      apiCallsToday,
+      blockedToday,
+      approvalToday,
+      sandboxToday,
+      sandboxRunsToday,
+      sandboxFailsToday,
+      errorsToday,
+      recentEvents,
+      latestUsers,
+      latestDeletionRequests,
+      deletionRequestEvents,
+      latestReceipts,
     ] = await Promise.all([
       count("SELECT COUNT(*) AS count FROM users"),
       count(`SELECT COUNT(*) AS count FROM users WHERE ${userActiveWhere}`),
-      userDeletionRequestedWhere ? count(`SELECT COUNT(*) AS count FROM users WHERE ${userDeletionRequestedWhere}`) : Promise.resolve(0),
-      userDeletedWhere ? count(`SELECT COUNT(*) AS count FROM users WHERE ${userDeletedWhere}`) : Promise.resolve(0),
+      userDeletionRequestedWhere
+        ? count(
+            `SELECT COUNT(*) AS count FROM users WHERE ${userDeletionRequestedWhere}`,
+          )
+        : Promise.resolve(0),
+      userDeletedWhere
+        ? count(`SELECT COUNT(*) AS count FROM users WHERE ${userDeletedWhere}`)
+        : Promise.resolve(0),
       count("SELECT COUNT(*) AS count FROM workspaces"),
-      count(`SELECT COUNT(*) AS count FROM workspaces WHERE ${workspaceActiveWhere}`),
-      workspaceDeletionRequestedWhere ? count(`SELECT COUNT(*) AS count FROM workspaces WHERE ${workspaceDeletionRequestedWhere}`) : Promise.resolve(0),
-      workspaceDeletedWhere ? count(`SELECT COUNT(*) AS count FROM workspaces WHERE ${workspaceDeletedWhere}`) : Promise.resolve(0),
-      count("SELECT COUNT(*) AS count FROM projects WHERE project_id != ?", "proj_demo_runtime_lab"),
-      count("SELECT COUNT(*) AS count FROM api_keys WHERE project_id IS NOT NULL AND revoked_at IS NULL AND disabled_at IS NULL AND api_key != ?", "aw_live_demo_key"),
-      count("SELECT COUNT(*) AS count FROM api_keys WHERE revoked_at IS NOT NULL"),
-      count("SELECT COUNT(*) AS count FROM events WHERE created_at >= ?", todayIso),
-      count("SELECT COUNT(*) AS count FROM events WHERE event_type = 'user_signed_in' AND created_at >= ?", todayIso),
-      count("SELECT COUNT(*) AS count FROM events WHERE event_type = 'check_action_called' AND created_at >= ?", todayIso),
-      count("SELECT COUNT(*) AS count FROM receipts WHERE decision = 'block' AND created_at >= ?", todayIso),
-      count("SELECT COUNT(*) AS count FROM receipts WHERE decision = 'approval_required' AND created_at >= ?", todayIso),
-      count("SELECT COUNT(*) AS count FROM receipts WHERE decision = 'sandbox_required' AND created_at >= ?", todayIso),
-      count("SELECT COUNT(*) AS count FROM events WHERE event_type = 'sandbox_run_success' AND created_at >= ?", todayIso),
-      count("SELECT COUNT(*) AS count FROM events WHERE event_type = 'sandbox_run_failed' AND created_at >= ?", todayIso),
-      count("SELECT COUNT(*) AS count FROM events WHERE event_type IN ('api_401','api_403','api_500') AND created_at >= ?", todayIso),
-      db.prepare(
-        `SELECT event_id, workspace_id, user_id, event_type, status, metadata_json, created_at
+      count(
+        `SELECT COUNT(*) AS count FROM workspaces WHERE ${workspaceActiveWhere}`,
+      ),
+      workspaceDeletionRequestedWhere
+        ? count(
+            `SELECT COUNT(*) AS count FROM workspaces WHERE ${workspaceDeletionRequestedWhere}`,
+          )
+        : Promise.resolve(0),
+      workspaceDeletedWhere
+        ? count(
+            `SELECT COUNT(*) AS count FROM workspaces WHERE ${workspaceDeletedWhere}`,
+          )
+        : Promise.resolve(0),
+      count(
+        "SELECT COUNT(*) AS count FROM projects WHERE project_id != ?",
+        "proj_demo_runtime_lab",
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM api_keys WHERE project_id IS NOT NULL AND revoked_at IS NULL AND disabled_at IS NULL AND api_key != ?",
+        "aw_live_demo_key",
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM api_keys WHERE revoked_at IS NOT NULL",
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM events WHERE created_at >= ?",
+        todayIso,
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM events WHERE event_type = 'user_signed_in' AND created_at >= ?",
+        todayIso,
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM events WHERE event_type = 'check_action_called' AND created_at >= ?",
+        todayIso,
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM receipts WHERE decision = 'block' AND created_at >= ?",
+        todayIso,
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM receipts WHERE decision = 'approval_required' AND created_at >= ?",
+        todayIso,
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM receipts WHERE decision = 'sandbox_required' AND created_at >= ?",
+        todayIso,
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM events WHERE event_type = 'sandbox_run_success' AND created_at >= ?",
+        todayIso,
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM events WHERE event_type = 'sandbox_run_failed' AND created_at >= ?",
+        todayIso,
+      ),
+      count(
+        "SELECT COUNT(*) AS count FROM events WHERE event_type IN ('api_401','api_403','api_500') AND created_at >= ?",
+        todayIso,
+      ),
+      db
+        .prepare(
+          `SELECT event_id, workspace_id, user_id, event_type, status, metadata_json, created_at
          FROM events ORDER BY created_at DESC LIMIT 50`,
-      ).all<{
-        event_id: string; workspace_id?: string | null; user_id?: string | null;
-        event_type: string; status: string; metadata_json?: string | null; created_at: string;
-      }>(),
-      db.prepare(
-        "SELECT user_id, email, name, image, created_at, last_login_at FROM users ORDER BY created_at DESC LIMIT 10",
-      ).all<{ user_id: string; email: string; name?: string | null; image?: string | null; created_at: string; last_login_at: string }>(),
+        )
+        .all<{
+          event_id: string;
+          workspace_id?: string | null;
+          user_id?: string | null;
+          event_type: string;
+          status: string;
+          metadata_json?: string | null;
+          created_at: string;
+        }>(),
+      db
+        .prepare(
+          "SELECT user_id, email, name, image, created_at, last_login_at FROM users ORDER BY created_at DESC LIMIT 10",
+        )
+        .all<{
+          user_id: string;
+          email: string;
+          name?: string | null;
+          image?: string | null;
+          created_at: string;
+          last_login_at: string;
+        }>(),
       latestDeletionRequestsQuery,
-      db.prepare(
-        `SELECT event_id, workspace_id, user_id, event_type, status, metadata_json, created_at
+      db
+        .prepare(
+          `SELECT event_id, workspace_id, user_id, event_type, status, metadata_json, created_at
          FROM events
          WHERE event_type = 'account_deletion_requested'
          ORDER BY created_at DESC
          LIMIT 20`,
-      ).all<{
-        event_id: string; workspace_id?: string | null; user_id?: string | null;
-        event_type: string; status: string; metadata_json?: string | null; created_at: string;
-      }>(),
-      db.prepare(
-        `SELECT receipt_id, workspace_id, project_id, decision, risk, policy, created_at
+        )
+        .all<{
+          event_id: string;
+          workspace_id?: string | null;
+          user_id?: string | null;
+          event_type: string;
+          status: string;
+          metadata_json?: string | null;
+          created_at: string;
+        }>(),
+      db
+        .prepare(
+          `SELECT receipt_id, workspace_id, project_id, decision, risk, policy, created_at
          FROM receipts
          ORDER BY created_at DESC
          LIMIT 20`,
-      ).all<{
-        receipt_id: string; workspace_id?: string | null; project_id?: string | null;
-        decision: string; risk: string; policy: string; created_at: string;
-      }>(),
+        )
+        .all<{
+          receipt_id: string;
+          workspace_id?: string | null;
+          project_id?: string | null;
+          decision: string;
+          risk: string;
+          policy: string;
+          created_at: string;
+        }>(),
     ]);
 
     return {
@@ -3371,7 +3347,15 @@ export async function getAdminStats() {
         userId: row.user_id ?? undefined,
         eventType: row.event_type,
         status: row.status,
-        metadata: row.metadata_json ? (() => { try { return JSON.parse(row.metadata_json!); } catch { return {}; } })() : {},
+        metadata: row.metadata_json
+          ? (() => {
+              try {
+                return JSON.parse(row.metadata_json!);
+              } catch {
+                return {};
+              }
+            })()
+          : {},
         createdAt: row.created_at,
       })),
       latestUsers: (latestUsers.results ?? []).map((row) => ({
@@ -3382,16 +3366,28 @@ export async function getAdminStats() {
         createdAt: row.created_at,
         lastLoginAt: row.last_login_at,
       })),
-      latestDeletionRequests: (latestDeletionRequests.results ?? []).map(mapUserRow),
-      deletionRequestEvents: (deletionRequestEvents.results ?? []).map((row) => ({
-        eventId: row.event_id,
-        workspaceId: row.workspace_id ?? undefined,
-        userId: row.user_id ?? undefined,
-        eventType: row.event_type,
-        status: row.status,
-        metadata: row.metadata_json ? (() => { try { return JSON.parse(row.metadata_json!); } catch { return {}; } })() : {},
-        createdAt: row.created_at,
-      })),
+      latestDeletionRequests: (latestDeletionRequests.results ?? []).map(
+        mapUserRow,
+      ),
+      deletionRequestEvents: (deletionRequestEvents.results ?? []).map(
+        (row) => ({
+          eventId: row.event_id,
+          workspaceId: row.workspace_id ?? undefined,
+          userId: row.user_id ?? undefined,
+          eventType: row.event_type,
+          status: row.status,
+          metadata: row.metadata_json
+            ? (() => {
+                try {
+                  return JSON.parse(row.metadata_json!);
+                } catch {
+                  return {};
+                }
+              })()
+            : {},
+          createdAt: row.created_at,
+        }),
+      ),
       latestReceipts: (latestReceipts.results ?? []).map((row) => ({
         receiptId: row.receipt_id,
         workspaceId: row.workspace_id ?? undefined,

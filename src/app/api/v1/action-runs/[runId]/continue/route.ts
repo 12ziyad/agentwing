@@ -2,10 +2,11 @@ import { continueRunFromRunner, RunTransitionError } from "@/lib/actionRunLifecy
 import { validateApiKeyFromRequest } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import type { RunAuthContext } from "@/lib/actionRunLifecycle";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request, { params }: { params: Promise<{ runId: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ runId: string }> }) {
   let body: unknown;
   try {
     body = await request.json();
@@ -39,3 +40,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ run
     throw error;
   }
 }
+
+export const POST = withRoute("v1/action-runs/[runId]/continue", handlePOST);

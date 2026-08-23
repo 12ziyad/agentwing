@@ -1,5 +1,6 @@
 import { getAgentWingD1 } from "@/lib/cloudflareD1";
 import { getDashboardAuth } from "@/lib/auth";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  * Detail is gated. An unauthenticated caller gets a status and nothing else,
  * because version and schema information is reconnaissance.
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const startedAt = Date.now();
 
   let d1Ok = false;
@@ -66,3 +67,5 @@ export async function GET(request: Request) {
     },
   });
 }
+
+export const GET = withRoute("health", handleGET);

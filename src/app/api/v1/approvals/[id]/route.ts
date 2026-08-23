@@ -2,6 +2,7 @@ import { approveRunAndContinue } from "@/lib/actionRunLifecycle";
 import { getActionRunByApprovalId, rejectActionRun, resolveApproval, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { assertNotSelfApproval, ForbiddenError, forbiddenResponse, requireCapability, SelfApprovalError } from "@/lib/rbac";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ export const runtime = "nodejs";
  * success, because the old implementation returned `result.success`, which is
  * true for a statement that matched nothing.
  */
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -94,3 +95,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   return Response.json({ ok: true, approvalId: id, status, resolvedBy: actor });
 }
+
+export const PATCH = withRoute("v1/approvals/[id]", handlePATCH);

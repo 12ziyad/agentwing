@@ -1,9 +1,10 @@
 import { getReceipt } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+async function handleGET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await getDashboardAuth(_request);
   if (!auth) return authRequiredResponse();
 
@@ -16,3 +17,5 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
   return Response.json({ receipt });
 }
+
+export const GET = withRoute("v1/receipts/[id]", handleGET);

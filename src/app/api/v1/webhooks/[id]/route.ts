@@ -2,10 +2,11 @@ import { getAgentWingD1 } from "@/lib/cloudflareD1";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
 import { deleteWebhookEndpoint } from "@/lib/webhookStore";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -32,3 +33,5 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   return Response.json({ ok: true });
 }
+
+export const DELETE = withRoute("v1/webhooks/[id]", handleDELETE);

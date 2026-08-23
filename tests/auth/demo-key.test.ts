@@ -36,13 +36,12 @@ describe("the demo key", () => {
     expect(demoKeyEnabled()).toBe(true);
   });
 
-  it("resolves to a real, isolated workspace rather than no workspace", async () => {
+  it("fails loudly when there is no database, rather than authenticating anyway", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    const auth = await validateApiKeyFromRequest(requestWithKey(DEMO_API_KEY));
-    // The point of the fix: the demo caller is a tenant like any other. An
-    // authenticated caller with no workspace is what made every query global.
-    expect(auth?.workspaceId).toBeTruthy();
-    expect(typeof auth?.workspaceId).toBe("string");
+    // There is no D1 binding in a unit test. Authentication used to fall through
+    // to an in-memory mirror here and succeed, which meant the absence of a
+    // database looked like a working system with no data. It now refuses.
+    await expect(validateApiKeyFromRequest(requestWithKey(DEMO_API_KEY))).rejects.toThrow(/database/i);
   });
 });
 

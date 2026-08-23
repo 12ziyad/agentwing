@@ -1,10 +1,11 @@
 import { revokeApiKey, trackEvent } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
-export async function DELETE(
+async function handleDELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -37,3 +38,5 @@ export async function DELETE(
 
   return Response.json({ ok: true, message: "API key revoked." });
 }
+
+export const DELETE = withRoute("v1/api-keys/[id]", handleDELETE);

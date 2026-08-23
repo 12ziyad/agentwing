@@ -10,6 +10,7 @@ import {
 } from "@/lib/agentwingStore";
 import { actionCheckLimitExceeded, actionCheckLimitResponse } from "@/lib/rateLimit";
 import { actionTypes, type AgentAction, type PolicyEvaluation } from "@/lib/agentwingTypes";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
@@ -45,7 +46,7 @@ function parseAction(body: unknown): AgentAction | undefined {
   };
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await validateApiKeyFromRequest(request);
   if (!auth) {
     await trackEvent("api_401", { metadata: { path: "/api/v1/check-action" } });
@@ -153,3 +154,5 @@ export async function POST(request: Request) {
     ...(approvalId ? { approvalId } : {}),
   });
 }
+
+export const POST = withRoute("v1/check-action", handlePOST);

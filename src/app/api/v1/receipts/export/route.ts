@@ -2,6 +2,7 @@ import { getAgentWingD1 } from "@/lib/cloudflareD1";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { exportChain, issueCheckpointIfNeeded } from "@/lib/receiptChainStore";
 import { checkpointPublicKey } from "@/lib/checkpointKey";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
  * is a stronger check, because then the log's author did not choose the key you
  * verified it against.
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -53,3 +54,5 @@ export async function GET(request: Request) {
     },
   });
 }
+
+export const GET = withRoute("v1/receipts/export", handleGET);

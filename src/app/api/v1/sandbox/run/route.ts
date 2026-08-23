@@ -11,6 +11,7 @@ import {
 import { sandboxRunLimitExceeded, sandboxRunLimitResponse } from "@/lib/rateLimit";
 import { actionTypes, type AgentAction, type PolicyEvaluation } from "@/lib/agentwingTypes";
 import { runE2BSandbox } from "@/lib/sandbox/providers/e2b";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
@@ -90,7 +91,7 @@ async function receiptForSandboxFailure(
   );
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await validateApiKeyFromRequest(request);
   if (!auth) return unauthorizedResponse();
 
@@ -222,3 +223,5 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const POST = withRoute("v1/sandbox/run", handlePOST);

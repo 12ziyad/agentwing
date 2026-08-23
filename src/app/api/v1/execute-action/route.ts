@@ -23,10 +23,11 @@ import {
   rememberResponse,
   requestFingerprint,
 } from "@/lib/idempotency";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await validateApiKeyFromRequest(request);
   if (!auth) {
     await trackEvent("api_401", { metadata: { path: "/api/v1/execute-action" } });
@@ -174,3 +175,5 @@ export async function POST(request: Request) {
 
   return Response.json(responseBody);
 }
+
+export const POST = withRoute("v1/execute-action", handlePOST);

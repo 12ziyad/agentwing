@@ -6,6 +6,7 @@ import {
 } from "@/lib/agentwingStore";
 import { authRequiredResponse, clearCookie, getDashboardAuth, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,7 @@ export const runtime = "nodejs";
  * for erasure and removed by an operator, which is the part that still requires
  * a human — so that is what the response and the UI now say.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -81,3 +82,5 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const POST = withRoute("v1/account/delete-request", handlePOST);

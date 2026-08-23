@@ -1,9 +1,10 @@
 import { getApiKeyFromRequest, getUsageForApiKey, getUsageForWorkspace, unauthorizedResponse, validateApiKeyFromRequest } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   if (getApiKeyFromRequest(request)) {
     const auth = await validateApiKeyFromRequest(request);
     if (!auth) return unauthorizedResponse();
@@ -20,3 +21,5 @@ export async function GET(request: Request) {
     usage: await getUsageForWorkspace(dashboardAuth.workspaceId),
   });
 }
+
+export const GET = withRoute("v1/usage", handleGET);

@@ -18,6 +18,7 @@ import {
   validateHeaders,
 } from "@/lib/mcp";
 import type { JsonRpcRequest } from "@/lib/mcp";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await validateApiKeyFromRequest(request);
   if (!auth) {
     await trackEvent("api_401", { metadata: { path: "/api/mcp" } });
@@ -169,7 +170,7 @@ export async function POST(request: Request) {
 }
 
 /** Protected-resource metadata, so an MCP client can discover how to authenticate. */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const origin = new URL(request.url).origin;
   return json({
     resource: `${origin}/api/mcp`,
@@ -181,3 +182,7 @@ export async function GET(request: Request) {
     supportedMethods: ["tools/call"],
   });
 }
+
+export const GET = withRoute("mcp", handleGET);
+
+export const POST = withRoute("mcp", handlePOST);

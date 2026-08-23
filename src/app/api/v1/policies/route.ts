@@ -2,6 +2,7 @@ import { createCustomPolicy, listCustomPolicies, PolicyStoreUnavailableError, tr
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { assertHasCriteria, parsePolicyInput, PolicyInputError } from "@/lib/policyInput";
 import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,7 @@ function errorResponse(error: unknown) {
   return undefined;
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -86,3 +87,7 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const GET = withRoute("v1/policies", handleGET);
+
+export const POST = withRoute("v1/policies", handlePOST);

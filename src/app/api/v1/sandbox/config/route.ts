@@ -1,6 +1,7 @@
 import { getSandboxConfig, removeE2BKey, sandboxOwnerKeyForWorkspace } from "@/lib/agentwingStore";
 import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { ForbiddenError, forbiddenResponse, requireCapability } from "@/lib/rbac";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,7 @@ function isSandboxSecretConfigured() {
   return false;
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
   });
 }
 
-export async function DELETE(request: Request) {
+async function handleDELETE(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -38,3 +39,7 @@ export async function DELETE(request: Request) {
     message: "E2B BYOK key removed. Runtime sandbox execution is disabled until a new key is saved.",
   });
 }
+
+export const GET = withRoute("v1/sandbox/config", handleGET);
+
+export const DELETE = withRoute("v1/sandbox/config", handleDELETE);

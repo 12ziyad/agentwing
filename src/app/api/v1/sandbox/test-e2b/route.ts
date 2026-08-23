@@ -2,10 +2,11 @@ import { authRequiredResponse, getDashboardAuth } from "@/lib/auth";
 import { getE2BApiKeyForExecution, getSandboxConfig, recordE2BTestResult, sandboxOwnerKeyForWorkspace } from "@/lib/agentwingStore";
 import type { AgentAction } from "@/lib/agentwingTypes";
 import { runE2BSandbox } from "@/lib/sandbox/providers/e2b";
+import { withRoute } from "@/lib/withRoute";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await getDashboardAuth(request);
   if (!auth) return authRequiredResponse();
 
@@ -83,3 +84,5 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const POST = withRoute("v1/sandbox/test-e2b", handlePOST);
