@@ -1,4 +1,3 @@
-import { ADMIN_COOKIE_NAME, getAdminAccessCode, hashAdminAccessCode } from "@/lib/adminAccess";
 import {
   createUserSession,
   deleteUserSession,
@@ -143,18 +142,9 @@ export async function createSessionForGoogleProfile(profile: Awaited<ReturnType<
 
 export async function getDashboardAuthFromCookieHeader(cookieHeader: string): Promise<DashboardAuthContext | undefined> {
   const sessionToken = getCookieValue(cookieHeader, SESSION_COOKIE_NAME);
-  if (sessionToken) {
-    const session = await getUserSession(await hashSessionToken(sessionToken));
-    if (session) return session;
-  }
+  if (!sessionToken) return undefined;
 
-  const accessCode = getAdminAccessCode();
-  const adminCookie = getCookieValue(cookieHeader, ADMIN_COOKIE_NAME);
-  if (accessCode && adminCookie === (await hashAdminAccessCode(accessCode))) {
-    return { mode: "admin" };
-  }
-
-  return undefined;
+  return getUserSession(await hashSessionToken(sessionToken));
 }
 
 export async function getDashboardAuth(request: Request) {

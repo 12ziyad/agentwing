@@ -4,9 +4,10 @@
 //  Watch it: allow / block / ask-for-approval / sandbox / checkpoint — live.
 //
 //  HOW TO RUN:
-//    1. Paste your FRESH api key below (regenerate it in the dashboard first).
-//    2. Make sure you have Node 18+  (run:  node -v )
-//    3. node mini-agent.mjs
+//    1. Create an API key in the AgentWing dashboard.
+//    2. export AGENTWING_API_KEY=aw_live_...   (never paste it into this file)
+//    3. Make sure you have Node 18+  (run:  node -v )
+//    4. node mini-agent.mjs
 //
 //  No npm install needed. Uses built-in fetch + readline only.
 // ============================================================================
@@ -15,11 +16,26 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
 // ----------------------------------------------------------------------------
-// CONFIG  — paste your key here (or set AGENTWING_API_KEY env var)
+// CONFIG — read from the environment. Never hardcode a key in this file.
 // ----------------------------------------------------------------------------
-const API_KEY  = process.env.AGENTWING_API_KEY || "aw_live_1a0b11bda69f9d687e923632166a9f7360cd73d1ebf6153e";
-const BASE_URL = "https://agentwing.gpmai.dev";
-const RUNNER_ID = "mini-agent-cli";
+const API_KEY = process.env.AGENTWING_API_KEY;
+const BASE_URL = process.env.AGENTWING_BASE_URL || "https://agentwing.gpmai.dev";
+const RUNNER_ID = process.env.AGENTWING_RUNNER_ID || "mini-agent-cli";
+
+if (!API_KEY) {
+  console.error(
+    [
+      "AGENTWING_API_KEY is not set.",
+      "",
+      "Create an API key in the AgentWing dashboard, then run:",
+      "",
+      "  export AGENTWING_API_KEY=aw_live_...      # macOS / Linux",
+      "  $env:AGENTWING_API_KEY = 'aw_live_...'    # Windows PowerShell",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
 
 // ----------------------------------------------------------------------------
 // pretty terminal helpers

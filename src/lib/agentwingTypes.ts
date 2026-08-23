@@ -262,14 +262,18 @@ export type AgentWingWorkspace = {
   createdAt: string;
 };
 
-export type DashboardAuthContext =
-  | {
-      mode: "user";
-      user: AgentWingUser;
-      workspace: AgentWingWorkspace;
-      workspaceId: string;
-    }
-  | {
-      mode: "admin";
-      workspaceId?: undefined;
-    };
+/**
+ * A dashboard caller is always a real, signed-in user bound to exactly one
+ * workspace. `workspaceId` is deliberately non-optional: there is no
+ * "authenticated but unscoped" state, so no query can silently drop its
+ * `WHERE workspace_id = ?` predicate.
+ *
+ * Operator access to /admin is granted by `isAdminEmail(user.email)` on top of
+ * a real session — never by a shared secret.
+ */
+export type DashboardAuthContext = {
+  mode: "user";
+  user: AgentWingUser;
+  workspace: AgentWingWorkspace;
+  workspaceId: string;
+};

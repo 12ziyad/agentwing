@@ -241,6 +241,18 @@ const BETA_ACTION_CHECK_LIMIT = 1000;
 const BETA_SANDBOX_RUN_LIMIT = 20;
 const DEMO_PROJECT_ID = "proj_demo_runtime_lab";
 
+/**
+ * The demo key is a publicly-known string that authenticates with no workspace,
+ * so any query it reaches runs unscoped across every tenant. It is a local
+ * development affordance only and must never be accepted by a deployed
+ * instance. This gate is the single place that decision is made.
+ *
+ * The key is removed entirely once the store moves onto `TenantScope`.
+ */
+export function demoKeyEnabled() {
+  return process.env.NODE_ENV !== "production";
+}
+
 type GlobalWithStore = typeof globalThis & {
   [STORE_SYMBOL]?: StoreState;
 };
@@ -974,7 +986,10 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
     try {
       await ensureD1DemoKey(db);
 
+      // The demo key authenticates with no workspace, so every query it reaches
+      // would run unscoped. It must never be accepted by a deployed instance.
       if (rawApiKey === DEMO_API_KEY) {
+        if (!demoKeyEnabled()) return undefined;
         return {
           apiKeyId: DEMO_API_KEY,
           keyPrefix: DEMO_API_KEY,
@@ -1014,6 +1029,8 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
     }
   }
 
+  if (rawApiKey === DEMO_API_KEY && !demoKeyEnabled()) return undefined;
+
   const state = getState();
   const apiKeyId = state.rawApiKeyToId[rawApiKey];
   if (!apiKeyId) return undefined;
@@ -1030,12 +1047,19 @@ export async function validateApiKeyFromRequest(request: Request): Promise<Authe
 }
 
 export function unauthorizedResponse() {
-  return Response.json(
-    {
+  return new Response(
+    JSON.stringify({
       error: "Unauthorized",
-      feedback: "Provide Authorization: Bearer aw_live_demo_key in local/dev mode.",
+      code: "unauthorized",
+      feedback: "Provide a valid API key as: Authorization: Bearer <your key>",
+    }),
+    {
+      status: 401,
+      headers: {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="agentwing"',
+      },
     },
-    { status: 401 },
   );
 }
 
