@@ -112,6 +112,18 @@ async function expireRunnerTokens(db: D1Database): Promise<number> {
   return result.meta?.changes ?? 0;
 }
 
+/** Remove expired and consumed sign-in transactions. */
+async function sweepOauthTransactions(db: D1Database): Promise<number> {
+  const result = await db
+    .prepare(
+      `DELETE FROM oauth_transactions
+       WHERE rowid IN (SELECT rowid FROM oauth_transactions WHERE expires_at <= ? LIMIT ?)`,
+    )
+    .bind(isoNow(), BATCH * 5)
+    .run();
+  return result.meta?.changes ?? 0;
+}
+
 /**
  * Disable endpoints that have dead-lettered repeatedly.
  *
@@ -151,6 +163,7 @@ export default {
           ["sessionsExpired", expireSessions],
           ["idempotencyKeysSwept", sweepIdempotencyKeys],
           ["runnerTokensExpired", expireRunnerTokens],
+          ["oauthTransactionsSwept", sweepOauthTransactions],
           ["endpointsDisabled", disableFailingEndpoints],
         ] as const) {
           try {

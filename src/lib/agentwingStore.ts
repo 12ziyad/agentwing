@@ -846,27 +846,32 @@ export async function upsertGoogleUserAndWorkspace(profile: {
   const db = await getDb();
   if (db) {
     try {
-      let userRow = await db
-        .prepare("SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE provider = 'google' AND provider_account_id = ?")
+      // Identity is keyed on (provider, subject) and nothing else.
+      //
+      // This used to fall back to matching by EMAIL and then overwrite
+      // provider_account_id with the new subject. Anyone who could obtain a
+      // token for a matching address took over the account outright, and the
+      // legitimate owner was locked out of their own -- an email address is not
+      // an identity, it is an attribute an IdP may or may not have verified.
+      const userRow = await db
+        .prepare(
+          `SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at
+           FROM users WHERE provider = 'google' AND provider_account_id = ?`,
+        )
         .bind(profile.providerAccountId)
         .first<UserRow>();
 
-      if (!userRow) {
-        userRow = await db
-          .prepare("SELECT user_id, email, name, image, provider, provider_account_id, created_at, last_login_at FROM users WHERE email = ?")
-          .bind(email)
-          .first<UserRow>();
-      }
-
       const userId = userRow?.user_id ?? randomId("user");
       if (userRow) {
+        // The subject already matched, so provider_account_id is not rewritten
+        // here -- only the mutable profile fields are.
         await db
           .prepare(
             `UPDATE users
-             SET email = ?, name = ?, image = ?, provider = 'google', provider_account_id = ?, last_login_at = ?
+             SET email = ?, name = ?, image = ?, last_login_at = ?
              WHERE user_id = ?`,
           )
-          .bind(email, profile.name ?? null, profile.image ?? null, profile.providerAccountId, now, userId)
+          .bind(email, profile.name ?? null, profile.image ?? null, now, userId)
           .run();
       } else {
         await db
