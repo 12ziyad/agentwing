@@ -147,7 +147,7 @@ async function disableFailingEndpoints(db: D1Database): Promise<number> {
   return result.meta?.changes ?? 0;
 }
 
-export default {
+const worker = {
   async scheduled(_event: unknown, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<void> {
     ctx.waitUntil(
       (async () => {
@@ -188,3 +188,5 @@ export default {
     );
   },
 };
+
+export default worker;

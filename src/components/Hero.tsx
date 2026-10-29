@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { PublicFooter } from "@/components/PublicLayout";
+import { PublicFooter, PublicNav } from "@/components/PublicLayout";
+import { PolicyPlayground } from "@/components/PolicyPlayground";
+import { DECISION_STYLE } from "@/components/decisionStyle";
+import { evaluateAgentAction } from "@/lib/agentwingPolicy";
+import type { AgentWingDecision } from "@/lib/agentwingTypes";
+import { PLAYGROUND_PRESETS } from "@/lib/playgroundPresets";
 
 /**
  * The landing page.
@@ -9,24 +14,13 @@ import { PublicFooter } from "@/components/PublicLayout";
  * this page becomes wrong — which is the correct incentive.
  */
 
-type Decision = "allow" | "block" | "approval_required" | "sandbox_required" | "restore_point_required";
+type Decision = AgentWingDecision;
 
-const DECISION_STYLE: Record<Decision, { dot: string; text: string; ring: string }> = {
-  allow: { dot: "bg-emerald-400", text: "text-emerald-300", ring: "ring-emerald-400/20" },
-  block: { dot: "bg-rose-400", text: "text-rose-300", ring: "ring-rose-400/20" },
-  approval_required: { dot: "bg-violet-400", text: "text-violet-300", ring: "ring-violet-400/20" },
-  sandbox_required: { dot: "bg-cyan-400", text: "text-cyan-300", ring: "ring-cyan-400/20" },
-  restore_point_required: { dot: "bg-amber-400", text: "text-amber-300", ring: "ring-amber-400/20" },
-};
-
-const LEDGER: ReadonlyArray<{ action: string; kind: string; decision: Decision; policy: string }> = [
-  { action: "cat .env", kind: "file_access", decision: "block", policy: "block-secret-file-access" },
-  { action: "rm -rf /", kind: "shell_command", decision: "block", policy: "block-destructive-shell-command" },
-  { action: "deploy → production", kind: "deploy_action", decision: "approval_required", policy: "approval-deploy-action" },
-  { action: "npm install lodash", kind: "package_install", decision: "sandbox_required", policy: "sandbox-package-install" },
-  { action: "write src/auth.ts", kind: "file_access", decision: "restore_point_required", policy: "restore-point-file-write" },
-  { action: "git status", kind: "shell_command", decision: "allow", policy: "allow-read-only-shell" },
-];
+// Computed, not typed in: each row is the engine's answer to its preset.
+const LEDGER = PLAYGROUND_PRESETS.filter((p) => p.id !== "refund" && p.id !== "force-push").map((preset) => {
+  const evaluation = evaluateAgentAction(preset.action);
+  return { action: preset.label, kind: preset.action.actionType, decision: evaluation.decision, policy: evaluation.policy };
+});
 
 const DECISIONS: ReadonlyArray<{ name: Decision; summary: string; detail: string }> = [
   {
@@ -59,42 +53,7 @@ const DECISIONS: ReadonlyArray<{ name: Decision; summary: string; detail: string
 export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
   return (
     <div className="min-h-screen bg-[#05070d] text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#05070d]/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-          <Link href="/" className="flex items-center gap-2.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/agentwing-icon.png" alt="" className="size-7 rounded-lg" />
-            <span className="text-[15px] font-bold tracking-tight text-white">AgentWing</span>
-          </Link>
-
-          <nav className="flex items-center gap-1 sm:gap-2">
-            <Link href="/docs" className="rounded px-3 py-1.5 text-sm text-slate-400 transition hover:text-white">
-              Docs
-            </Link>
-            <Link href="/security" className="hidden rounded px-3 py-1.5 text-sm text-slate-400 transition hover:text-white sm:block">
-              Security
-            </Link>
-            <Link href="/open-source" className="hidden rounded px-3 py-1.5 text-sm text-slate-400 transition hover:text-white sm:block">
-              Open source
-            </Link>
-            {isSignedIn ? (
-              <Link
-                href="/dashboard"
-                className="ml-1 rounded-md border border-white/[0.14] px-3.5 py-1.5 text-sm font-medium text-slate-100 transition hover:border-white/30"
-              >
-                Dashboard
-              </Link>
-            ) : (
-              <a
-                href="/api/auth/signin/google"
-                className="ml-1 rounded-md bg-white px-3.5 py-1.5 text-sm font-semibold text-black transition hover:bg-slate-200"
-              >
-                Sign in
-              </a>
-            )}
-          </nav>
-        </div>
-      </header>
+      <PublicNav isSignedIn={isSignedIn} />
 
       {/* ── Hero ─────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-white/[0.06]">
@@ -135,13 +94,19 @@ export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
                 Start free
               </a>
             )}
-            <Link
-              href="/docs"
+            <a
+              href="#try"
               className="rounded-md border border-white/[0.12] px-5 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-white/25 hover:text-white"
             >
-              Read the docs
-            </Link>
+              Try it live
+            </a>
           </div>
+          <p className="mt-4 text-xs text-slate-500">
+            Free during beta · no card ·{" "}
+            <Link href="/pricing" className="underline decoration-slate-700 underline-offset-4 hover:text-slate-300">
+              see pricing
+            </Link>
+          </p>
 
           {/* Live decision ledger */}
           <div className="mt-14 overflow-hidden rounded-xl border border-white/[0.08] bg-[#080b12] shadow-2xl shadow-black/50">
@@ -178,6 +143,46 @@ export function Hero({ isSignedIn }: { isSignedIn?: boolean }) {
               })}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Playground ───────────────────────────────────────── */}
+      <section id="try" className="scroll-mt-20 border-b border-white/[0.06]">
+        <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-20">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-300/70">Try it — no sign-in</p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Talk the engine into something</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                This is the production policy engine, running in your browser. Pick an action or type your own and watch
+                the answer change as you type. Try to sneak a dangerous command past it.
+              </p>
+            </div>
+            <Link href="/playground" className="text-sm font-semibold text-cyan-300 transition hover:text-cyan-200">
+              Open full playground →
+            </Link>
+          </div>
+          <div className="mt-8">
+            <PolicyPlayground compact />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Works with ───────────────────────────────────────── */}
+      <section className="border-b border-white/[0.06]">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-3 px-5 py-8 sm:px-8">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Works with</p>
+          {[
+            ["Claude Code", "PreToolUse hook"],
+            ["Cursor", "hook"],
+            ["Codex", "hook"],
+            ["Any MCP client", "remote MCP server"],
+            ["Your own agent", "REST API · TypeScript SDK"],
+          ].map(([name, via]) => (
+            <p key={name} className="text-sm text-slate-300">
+              {name} <span className="font-mono text-[11px] text-slate-600">· {via}</span>
+            </p>
+          ))}
         </div>
       </section>
 
@@ -318,8 +323,8 @@ if (decision !== "allow") {
               Give your agent a gate it has to ask through
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400">
-              Create a project, generate a key, and put one call in front of your agent&apos;s tools. Open source under
-              Apache&nbsp;2.0.
+              Create a project, generate a key, and put one call in front of your agent&apos;s tools. Free during the
+              beta, open source under Apache&nbsp;2.0.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               {isSignedIn ? (

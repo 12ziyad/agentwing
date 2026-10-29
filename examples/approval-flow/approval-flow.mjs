@@ -41,7 +41,7 @@ const action = {
 console.log("→ proposing:", action.description);
 
 try {
-  const { run, handoff, timedOut } = await aw.executeAction(action, {
+  const { run, timedOut } = await aw.executeAction(action, {
     runtime: { surface: "cli", runnerId: "approval-flow-example" },
 
     // Called once, as soon as the run is held. Surface this to your operator

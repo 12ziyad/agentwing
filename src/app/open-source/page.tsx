@@ -1,29 +1,29 @@
 import { PublicNav, PublicFooter } from "@/components/PublicLayout";
 
+const REPO = "https://github.com/12ziyad/agentwing";
+
+// What is actually in the repository today. npm publishing has not happened
+// yet, so each entry links to its source rather than claiming an install.
 const repos = [
   {
-    name: "agentwing-sdk",
-    license: "MIT — planned",
-    description: "TypeScript SDK for calling AgentWing policy APIs. Typed check-action client, decision helpers, and agent loop wrappers.",
-    status: "coming-soon",
+    name: "@agentwing/hook",
+    path: "packages/hook",
+    description: "A PreToolUse hook for Claude Code, Cursor and Codex. Every Bash, Write, Edit, Read and WebFetch is checked before it runs — no changes to your agent.",
   },
   {
-    name: "agentwing-policy-pack",
-    license: "MIT — planned",
-    description: "Default critical runtime policies for autonomous agents: .env protection, destructive command blocking, credential exfiltration rules.",
-    status: "coming-soon",
+    name: "@agentwing/sdk",
+    path: "packages/sdk",
+    description: "TypeScript SDK with a typed HTTP client, guardAction() for the full decide-then-run loop, and runtime approval helpers. ESM and CJS, Node 18+.",
   },
   {
-    name: "agentwing-examples",
-    license: "MIT — planned",
-    description: "Integration examples for Claude Code, Codex, Cursor, and custom agents. Shows full check-action → decision → re-plan loop.",
-    status: "coming-soon",
+    name: "@agentwing/receipt-verifier",
+    path: "packages/receipt-verifier",
+    description: "Verifies an exported receipt log offline, without trusting AgentWing. If an entry was altered, it says which one.",
   },
   {
-    name: "agentwing-sandbox-adapters",
-    license: "MIT — planned",
-    description: "BYOK sandbox adapters for E2B, Daytona, Cloudflare Sandbox, and custom HTTP sandboxes.",
-    status: "coming-soon",
+    name: "examples",
+    path: "examples",
+    description: "Runnable examples: a guarded runner, a human approval flow for a production deploy, and a small agent loop that asks before every action.",
   },
 ];
 
@@ -40,33 +40,37 @@ export default function OpenSourcePage() {
 
         <div className="mt-8 grid gap-4">
           {repos.map((repo) => (
-            <div key={repo.name} className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
+            <a
+              key={repo.name}
+              href={`${REPO}/tree/main/${repo.path}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group rounded-md border border-white/[0.08] bg-[#080b12] p-6 transition hover:border-white/20"
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-mono text-base font-semibold text-white">{repo.name}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{repo.license}</p>
+                  <p className="mt-0.5 font-mono text-xs text-slate-500">{repo.path} · Apache-2.0</p>
                 </div>
-                <span className="rounded border border-amber-300/20 bg-amber-300/[0.06] px-2 py-0.5 text-xs font-semibold text-amber-200">
-                  Repository publishing in progress
-                </span>
+                <span className="text-xs font-semibold text-cyan-300 transition group-hover:text-cyan-200">View source →</span>
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-400">{repo.description}</p>
-            </div>
+            </a>
           ))}
         </div>
 
         <div className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-          <p className="font-semibold text-white">GitHub</p>
+          <p className="font-semibold text-white">One repository</p>
           <p className="mt-2 text-sm text-slate-400">
-            Repositories are publishing to GitHub. Follow for updates.
+            The hosted service, the policy engine, the packages and the test suite all live in one public repository.
           </p>
           <a
-            href="https://github.com/12ziyad"
+            href={REPO}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-4 inline-flex items-center gap-2 rounded border border-white/[0.1] px-4 py-2 text-sm font-semibold text-slate-200 transition hover:text-white"
           >
-            github.com/12ziyad
+            github.com/12ziyad/agentwing
           </a>
         </div>
       </main>

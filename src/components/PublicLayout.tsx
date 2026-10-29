@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { PublicNavLinks } from "@/components/PublicNavLinks";
+import { PublicNavLinks, PublicNavMobile } from "@/components/PublicNavLinks";
 
 const footerLinks = {
   Product: [
+    { href: "/playground", label: "Playground" },
+    { href: "/pricing", label: "Pricing" },
     { href: "/docs", label: "Docs" },
     { href: "/dashboard", label: "Dashboard" },
     { href: "/blog", label: "Blog" },
@@ -33,6 +35,7 @@ export function PublicNav({ isSignedIn }: { isSignedIn?: boolean }) {
           <PublicNavLinks />
         </div>
         <div className="flex items-center gap-2">
+          <PublicNavMobile />
           {isSignedIn ? (
             <Link
               href="/dashboard"
@@ -43,7 +46,7 @@ export function PublicNav({ isSignedIn }: { isSignedIn?: boolean }) {
           ) : (
             <a
               href="/api/auth/signin/google?next=/dashboard"
-              className="rounded border border-white/[0.1] px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:text-white"
+              className="rounded-md bg-white px-3.5 py-1.5 text-xs font-semibold text-black transition hover:bg-slate-200"
             >
               Sign in
             </a>
@@ -69,7 +72,7 @@ export function PublicFooter() {
               Guarded execution control layer for AI agents. Policy, approval, sandbox routing, restore points, logs, and receipts.
             </p>
             <div className="mt-4 flex gap-3">
-              <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 transition hover:text-slate-200">
+              <a href="https://github.com/12ziyad/agentwing" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 transition hover:text-slate-200">
                 GitHub
               </a>
               <a href="https://www.reddit.com/user/Far_Pangolin_7657/" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 transition hover:text-slate-200">

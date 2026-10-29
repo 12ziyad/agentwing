@@ -10,14 +10,19 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
  *
  * `frame-ancestors 'none'` is the one that matters most here: the dashboard has
  * approve and reject buttons, and without it those are clickjackable.
+ *
+ * `next dev` evaluates code for Fast Refresh, so 'unsafe-eval' is added in
+ * development only. Without it the dev server serves pages that never hydrate.
  */
+const devEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
+
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${devEval}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
