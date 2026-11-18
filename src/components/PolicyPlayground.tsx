@@ -52,7 +52,7 @@ function toAction(draft: Draft): AgentAction {
 const inputClass =
   "w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 py-2 font-mono text-[13px] text-slate-100 placeholder:text-slate-600 outline-none transition focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/15";
 
-export function PolicyPlayground({ compact = false }: { compact?: boolean }) {
+export function PolicyPlayground() {
   const [presetId, setPresetId] = useState<string | null>(PLAYGROUND_PRESETS[0].id);
   const [draft, setDraft] = useState<Draft>(() => toDraft(PLAYGROUND_PRESETS[0].action));
 
@@ -166,12 +166,10 @@ export function PolicyPlayground({ compact = false }: { compact?: boolean }) {
               </select>
             </label>
           </div>
-          {!compact && (
-            <label className="block min-w-0">
-              <span className="mb-1 block text-[11px] text-slate-500">description</span>
-              <input value={draft.description} onChange={(e) => update("description", e.target.value)} placeholder="why the agent wants this" className={inputClass} />
-            </label>
-          )}
+          <label className="block min-w-0">
+            <span className="mb-1 block text-[11px] text-slate-500">description</span>
+            <input value={draft.description} onChange={(e) => update("description", e.target.value)} placeholder="why the agent wants this" className={inputClass} />
+          </label>
         </div>
 
         {/* ── Decision ── */}

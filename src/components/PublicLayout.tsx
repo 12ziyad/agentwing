@@ -1,4 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { PublicNavLinks, PublicNavMobile } from "@/components/PublicNavLinks";
 
 const footerLinks = {
@@ -6,51 +8,53 @@ const footerLinks = {
     { href: "/playground", label: "Playground" },
     { href: "/pricing", label: "Pricing" },
     { href: "/docs", label: "Docs" },
-    { href: "/dashboard", label: "Dashboard" },
+  ],
+  Resources: [
+    { href: "/open-source", label: "Open Source" },
+    { href: "/security", label: "Security" },
     { href: "/blog", label: "Blog" },
+    { href: "/vision", label: "Vision" },
   ],
   Company: [
-    { href: "/vision", label: "Vision" },
-    { href: "/open-source", label: "Open Source" },
+    { href: "/support", label: "Support" },
     { href: "/contact", label: "Contact" },
-  ],
-  Legal: [
     { href: "/privacy", label: "Privacy Policy" },
     { href: "/terms", label: "Terms of Service" },
-    { href: "/security", label: "Security" },
-    { href: "/support", label: "Support" },
   ],
 };
 
+const publicWidth = "mx-auto w-full max-w-[1360px] px-[clamp(20px,5vw,72px)]";
+
+function PublicBrand() {
+  return (
+    <Link href="/" className="inline-flex w-fit shrink-0 items-center gap-2.5 text-lg font-bold tracking-[-0.055em] text-[#f5f6ed]">
+      <Image
+        src="/agentwing-icon.png"
+        alt=""
+        width={30}
+        height={30}
+        className="rounded-md hue-rotate-[-105deg]"
+        unoptimized
+      />
+      AgentWing
+    </Link>
+  );
+}
+
 export function PublicNav({ isSignedIn }: { isSignedIn?: boolean }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#05070d]/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-4 sm:px-6">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/agentwing-icon.png" alt="" className="size-7 rounded" />
-            <span>AgentWing</span>
-          </Link>
-          <PublicNavLinks />
-        </div>
-        <div className="flex items-center gap-2">
+    <header className="sticky top-0 z-30 border-b border-[#30352a] bg-[#12140f]/95 font-sans backdrop-blur">
+      <div className={`${publicWidth} flex min-h-[68px] items-center justify-between gap-3`}>
+        <PublicBrand />
+        <PublicNavLinks />
+        <div className="flex items-center gap-2 sm:gap-3">
+          <a
+            href={isSignedIn ? "/dashboard" : "/api/auth/signin/google?next=/dashboard"}
+            className="inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-md border border-[#47563b] bg-[#23291b] px-2.5 text-xs font-semibold text-[#e8f7c4] transition hover:border-[#dafa76] sm:px-3.5 sm:text-sm"
+          >
+            {isSignedIn ? "Dashboard" : "Get started"} <ArrowUpRight size={14} aria-hidden />
+          </a>
           <PublicNavMobile />
-          {isSignedIn ? (
-            <Link
-              href="/dashboard"
-              className="rounded border border-cyan-300/25 bg-cyan-300/[0.08] px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/[0.14]"
-            >
-              Dashboard
-            </Link>
-          ) : (
-            <a
-              href="/api/auth/signin/google?next=/dashboard"
-              className="rounded-md bg-white px-3.5 py-1.5 text-xs font-semibold text-black transition hover:bg-slate-200"
-            >
-              Sign in
-            </a>
-          )}
         </div>
       </div>
     </header>
@@ -59,34 +63,25 @@ export function PublicNav({ isSignedIn }: { isSignedIn?: boolean }) {
 
 export function PublicFooter() {
   return (
-    <footer className="border-t border-white/[0.08] bg-[#080b12]">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <div className="flex items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/agentwing-icon.png" alt="" className="size-7 rounded" />
-              <p className="text-sm font-semibold text-white">AgentWing</p>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              Guarded execution control layer for AI agents. Policy, approval, sandbox routing, restore points, logs, and receipts.
-            </p>
-            <div className="mt-4 flex gap-3">
-              <a href="https://github.com/12ziyad/agentwing" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 transition hover:text-slate-200">
-                GitHub
+    <footer className="border-t border-[#30352a] bg-[#12140f] font-sans text-[#aeb3a4]">
+      <div className={`${publicWidth} py-12 sm:py-14`}>
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-[1.4fr_1fr_1fr_1fr]">
+          <div className="col-span-2 sm:col-span-1">
+            <PublicBrand />
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              <a href="https://github.com/12ziyad/agentwing" className="inline-flex items-center gap-1 hover:text-[#dafa76]">
+                GitHub <ArrowUpRight size={13} aria-hidden />
               </a>
-              <a href="https://www.reddit.com/user/Far_Pangolin_7657/" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 transition hover:text-slate-200">
-                Reddit
-              </a>
+              <a href="https://github.com/12ziyad/agentwing/blob/main/LICENSE" className="hover:text-[#dafa76]">Apache 2.0</a>
             </div>
           </div>
           {Object.entries(footerLinks).map(([section, links]) => (
             <div key={section}>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{section}</p>
-              <ul className="mt-3 space-y-2">
+              <p className="text-sm font-semibold text-[#f5f6ed]">{section}</p>
+              <ul className="mt-3 space-y-2.5">
                 {links.map(({ href, label }) => (
                   <li key={href}>
-                    <Link href={href} className="text-xs text-slate-500 transition hover:text-slate-200">
+                    <Link href={href} className="text-sm hover:text-[#dafa76]">
                       {label}
                     </Link>
                   </li>
@@ -95,11 +90,8 @@ export function PublicFooter() {
             </div>
           ))}
         </div>
-        <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.06] pt-6">
-          <p className="text-xs text-slate-600">© 2026 GPMai Labs. All rights reserved.</p>
-          <Link href="/contact" className="text-xs text-slate-600 transition hover:text-slate-400">
-            Contact
-          </Link>
+        <div className="mt-10 border-t border-[#30352a] pt-6">
+          <p className="text-xs">© 2026 GPMai Labs</p>
         </div>
       </div>
     </footer>

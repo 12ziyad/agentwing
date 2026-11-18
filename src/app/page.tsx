@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Hero } from "@/components/Hero";
+import { LandingPage } from "@/components/landing/LandingPage";
 import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "AgentWing | Runtime control for AI agents",
+  description: "Check AI agent tool calls before they run. Apply workspace policies, require human approval, route execution to a sandbox, and audit decisions with verifiable receipts.",
+  metadataBase: new URL("https://agentwing.gpmai.dev"),
+  alternates: { canonical: "/" },
+};
 
 export default async function Home() {
   const cookieStore = await cookies();
@@ -11,11 +19,5 @@ export default async function Home() {
     .map((c) => `${c.name}=${encodeURIComponent(c.value)}`)
     .join("; ");
   const auth = await getDashboardAuthFromCookieHeader(cookieHeader);
-  const isSignedIn = Boolean(auth);
-
-  return (
-    <div className="min-h-full bg-[#05070d]">
-      <Hero isSignedIn={isSignedIn} />
-    </div>
-  );
+  return <LandingPage isSignedIn={Boolean(auth)} />;
 }
