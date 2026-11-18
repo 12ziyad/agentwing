@@ -15,7 +15,7 @@ const emptySandboxConfig: SandboxProviderConfig = {
 };
 
 function cardClass() {
-  return "rounded-md border border-white/[0.08] bg-[#080b12] p-5";
+  return "rounded-md border border-divider bg-surface p-5";
 }
 
 function formatDate(value?: string) {
@@ -31,7 +31,7 @@ function maskedSandboxKey(config: SandboxProviderConfig) {
 function statusPillClass(kind: "connected" | "empty" | "success" | "failed") {
   const classes = {
     connected: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
-    empty: "border-slate-300/15 bg-slate-300/[0.06] text-slate-300",
+    empty: "border-slate-300/15 bg-slate-300/[0.06] text-secondary",
     success: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
     failed: "border-amber-300/25 bg-amber-300/[0.08] text-amber-100",
   };
@@ -149,9 +149,9 @@ export function SandboxesPanel() {
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200">AgentWing</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Sandboxes</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">AgentWing</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Sandboxes</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
           Route risky agent actions to isolated execution environments before they touch your real workspace.
         </p>
       </div>
@@ -175,8 +175,8 @@ export function SandboxesPanel() {
       <section className={cardClass()}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">E2B BYOK Sandbox</p>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+            <p className="text-sm font-semibold text-foreground">E2B BYOK Sandbox</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
               {connected
                 ? "Your E2B sandbox is connected for sandbox_required action runs."
                 : "Connect your E2B API key so sandbox_required actions can run in isolation."}
@@ -197,7 +197,7 @@ export function SandboxesPanel() {
         </div>
 
         {connected && !loading && (
-          <div className="mt-5 grid gap-x-6 gap-y-4 border-t border-white/[0.08] pt-5 md:grid-cols-2">
+          <div className="mt-5 grid gap-x-6 gap-y-4 border-t border-divider pt-5 md:grid-cols-2">
             <ProviderDetail label="Key" value={maskedSandboxKey(config)} mono />
             <ProviderDetail label="Connected" value={formatDate(config.createdAt)} />
           </div>
@@ -208,8 +208,8 @@ export function SandboxesPanel() {
             <p className="text-sm font-semibold text-amber-100">E2B connection failed. Replace the key or test again.</p>
             {(technicalDetails || config.lastError) && (
               <details className="mt-3">
-                <summary className="cursor-pointer text-xs font-semibold text-slate-300">Technical details</summary>
-                <pre className="mt-2 max-h-40 overflow-auto rounded border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-5 text-slate-400">
+                <summary className="cursor-pointer text-xs font-semibold text-secondary">Technical details</summary>
+                <pre className="mt-2 max-h-40 overflow-auto rounded border border-divider bg-background p-3 text-xs leading-5 text-muted">
                   {(technicalDetails || config.lastError)?.slice(0, 2000)}
                 </pre>
               </details>
@@ -218,11 +218,11 @@ export function SandboxesPanel() {
         )}
 
         {showSetup && !secretMissing && (
-          <div className={connected ? "mt-5 border-t border-white/[0.08] pt-5" : "mt-5"}>
-            <label htmlFor="e2b-key" className="text-sm font-semibold text-white">
+          <div className={connected ? "mt-5 border-t border-divider pt-5" : "mt-5"}>
+            <label htmlFor="e2b-key" className="text-sm font-semibold text-foreground">
               {isReplacing ? "Replace E2B API key" : "E2B API key"}
             </label>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-muted">
               Your key is stored server-side and never shown again.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -232,31 +232,31 @@ export function SandboxesPanel() {
                 value={e2bInput}
                 onChange={(event) => setE2bInput(event.target.value)}
                 placeholder="e2b_..."
-                className="min-h-11 flex-1 rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-11 flex-1 rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               />
               <button
                 type="button"
                 disabled={busy}
                 onClick={saveKey}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2 text-sm font-semibold text-[#031018] disabled:opacity-60"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-brand-outline bg-brand px-4 py-2 text-sm font-semibold text-brand-ink disabled:opacity-60"
               >
                 <Save className="size-4" />
                 Save & Test Connection
               </button>
             </div>
-            <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-xs font-semibold text-cyan-200 transition hover:text-cyan-100">
+            <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-xs font-semibold text-brand transition hover:text-brand-text">
               Get E2B API key
             </a>
           </div>
         )}
 
         {connected && !showSetup && (
-          <div className="mt-5 flex flex-wrap gap-3 border-t border-white/[0.08] pt-5">
+          <div className="mt-5 flex flex-wrap gap-3 border-t border-divider pt-5">
             <button
               type="button"
               disabled={busy}
               onClick={() => void testKey()}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-slate-100 disabled:opacity-60"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-outline bg-white/[0.04] px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
             >
               <Play className="size-4" />
               Test connection
@@ -265,7 +265,7 @@ export function SandboxesPanel() {
               type="button"
               disabled={busy}
               onClick={() => setIsReplacing(true)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-300/[0.08] px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-60"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-brand-outline bg-brand-surface px-4 py-2 text-sm font-semibold text-brand-text disabled:opacity-60"
             >
               <RefreshCw className="size-4" />
               Replace key
@@ -283,8 +283,8 @@ export function SandboxesPanel() {
         )}
 
         {status && (
-          <div className="mt-4 flex items-start gap-2 rounded-md border border-white/[0.08] bg-[#05070d] px-3 py-2 text-sm text-slate-300">
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-cyan-200" />
+          <div className="mt-4 flex items-start gap-2 rounded-md border border-divider bg-background px-3 py-2 text-sm text-secondary">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-brand" />
             <p>{busy ? "Working..." : status}</p>
           </div>
         )}
@@ -312,9 +312,9 @@ function StatusCard({
 }) {
   return (
     <article className={cardClass()}>
-      <p className="text-xs font-medium text-slate-400">{label}</p>
+      <p className="text-xs font-medium text-muted">{label}</p>
       <span className={`mt-3 ${statusPillClass(kind)}`}>{value}</span>
-      {copy && <p className="mt-3 text-xs text-slate-500">{copy}</p>}
+      {copy && <p className="mt-3 text-xs text-subdued">{copy}</p>}
     </article>
   );
 }
@@ -324,10 +324,10 @@ function FutureProvider({ title }: { title: string }) {
     <article className={cardClass()}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">{title}</p>
-          <p className="mt-2 text-xs leading-5 text-slate-500">Configure later for custom execution environments.</p>
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="mt-2 text-xs leading-5 text-subdued">Configure later for custom execution environments.</p>
         </div>
-        <span className="rounded border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-slate-400">
+        <span className="rounded border border-divider bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-muted">
           Coming soon
         </span>
       </div>
@@ -337,9 +337,9 @@ function FutureProvider({ title }: { title: string }) {
 
 function ProviderDetail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="min-w-0 border-b border-white/[0.06] pb-3">
-      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
-      <p className={mono ? "mt-2 break-all font-mono text-sm text-cyan-100" : "mt-2 text-sm font-semibold text-white"}>
+    <div className="min-w-0 border-b border-divider/70 pb-3">
+      <p className="text-xs font-medium uppercase tracking-[0.12em] text-subdued">{label}</p>
+      <p className={mono ? "mt-2 break-all font-mono text-sm text-brand-text" : "mt-2 text-sm font-semibold text-foreground"}>
         {value}
       </p>
     </div>

@@ -50,7 +50,7 @@ function toAction(draft: Draft): AgentAction {
 }
 
 const inputClass =
-  "w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 py-2 font-mono text-[13px] text-slate-100 placeholder:text-slate-600 outline-none transition focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/15";
+  "w-full rounded-md border border-outline bg-background px-3 py-2 font-mono text-[13px] text-foreground placeholder:text-subdued outline-none transition focus:border-brand/65 focus:ring-2 focus:ring-brand/20";
 
 export function PolicyPlayground() {
   const [presetId, setPresetId] = useState<string | null>(PLAYGROUND_PRESETS[0].id);
@@ -82,15 +82,15 @@ export function PolicyPlayground() {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#080b12] shadow-2xl shadow-black/40">
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-4 py-3">
+    <div className="overflow-hidden rounded-xl border border-divider bg-surface shadow-2xl shadow-black/40">
+      <div className="flex flex-wrap items-center gap-2 border-b border-divider/70 px-4 py-3">
         <span className="size-2 rounded-full bg-emerald-400 shadow-[0_0_10px] shadow-emerald-400/70" />
-        <span className="font-mono text-[11px] text-slate-400">policy engine · running in your browser</span>
-        <span className="ml-auto font-mono text-[11px] text-slate-600">no key · nothing sent</span>
+        <span className="font-mono text-[11px] text-muted">policy engine · running in your browser</span>
+        <span className="ml-auto font-mono text-[11px] text-subdued">no key · nothing sent</span>
       </div>
 
-      <div className="border-b border-white/[0.06] px-4 py-3">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Try an action</p>
+      <div className="border-b border-divider/70 px-4 py-3">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-subdued">Try an action</p>
         <div className="flex flex-wrap gap-2">
           {PLAYGROUND_PRESETS.map((preset) => {
             const active = preset.id === presetId;
@@ -103,8 +103,8 @@ export function PolicyPlayground() {
                 aria-pressed={active}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[12px] transition ${
                   active
-                    ? "border-white/25 bg-white/[0.08] text-white"
-                    : "border-white/[0.08] text-slate-400 hover:border-white/20 hover:text-slate-200"
+                    ? "border-outline bg-white/[0.08] text-foreground"
+                    : "border-divider text-muted hover:border-outline hover:text-secondary"
                 }`}
               >
                 <span className={`size-1.5 rounded-full ${chip.dot}`} />
@@ -117,13 +117,13 @@ export function PolicyPlayground() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2">
         {/* ── Proposed action ── */}
-        <div className="min-w-0 space-y-3 border-b border-white/[0.06] p-4 lg:border-b-0 lg:border-r">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Your agent proposes <span className="normal-case tracking-normal text-slate-600">— edit anything</span>
+        <div className="min-w-0 space-y-3 border-b border-divider/70 p-4 lg:border-b-0 lg:border-r">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-subdued">
+            Your agent proposes <span className="normal-case tracking-normal text-subdued">— edit anything</span>
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block min-w-0">
-              <span className="mb-1 block text-[11px] text-slate-500">actionType</span>
+              <span className="mb-1 block text-[11px] text-subdued">actionType</span>
               <select
                 value={draft.actionType}
                 onChange={(e) => update("actionType", e.target.value as UniversalActionType)}
@@ -137,12 +137,12 @@ export function PolicyPlayground() {
               </select>
             </label>
             <label className="block min-w-0">
-              <span className="mb-1 block text-[11px] text-slate-500">tool</span>
+              <span className="mb-1 block text-[11px] text-subdued">tool</span>
               <input value={draft.tool} onChange={(e) => update("tool", e.target.value)} placeholder="terminal" className={inputClass} />
             </label>
           </div>
           <label className="block min-w-0">
-            <span className="mb-1 block text-[11px] text-slate-500">command</span>
+            <span className="mb-1 block text-[11px] text-subdued">command</span>
             <input
               value={draft.command}
               onChange={(e) => update("command", e.target.value)}
@@ -153,11 +153,11 @@ export function PolicyPlayground() {
           </label>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block min-w-0">
-              <span className="mb-1 block text-[11px] text-slate-500">target</span>
+              <span className="mb-1 block text-[11px] text-subdued">target</span>
               <input value={draft.target} onChange={(e) => update("target", e.target.value)} placeholder="path, host or env" className={inputClass} spellCheck={false} />
             </label>
             <label className="block min-w-0">
-              <span className="mb-1 block text-[11px] text-slate-500">metadata.operation</span>
+              <span className="mb-1 block text-[11px] text-subdued">metadata.operation</span>
               <select value={draft.operation} onChange={(e) => update("operation", e.target.value)} className={inputClass}>
                 <option value="">(none)</option>
                 <option value="read">read</option>
@@ -167,29 +167,29 @@ export function PolicyPlayground() {
             </label>
           </div>
           <label className="block min-w-0">
-            <span className="mb-1 block text-[11px] text-slate-500">description</span>
+            <span className="mb-1 block text-[11px] text-subdued">description</span>
             <input value={draft.description} onChange={(e) => update("description", e.target.value)} placeholder="why the agent wants this" className={inputClass} />
           </label>
         </div>
 
         {/* ── Decision ── */}
         <div className="flex min-w-0 flex-col p-4" aria-live="polite">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">AgentWing answers</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-subdued">AgentWing answers</p>
           <div className={`mt-3 rounded-lg p-4 ring-1 ${style.ring} ${style.bg}`}>
             <div className="flex flex-wrap items-center gap-3">
               <span className={`inline-flex items-center gap-2 font-mono text-lg font-semibold ${style.text}`}>
                 <span className={`size-2.5 rounded-full ${style.dot}`} />
                 {evaluation.decision}
               </span>
-              <span className="text-sm text-slate-300">{style.label}</span>
-              <span className="ml-auto rounded border border-white/[0.1] px-2 py-0.5 font-mono text-[11px] text-slate-400">
+              <span className="text-sm text-secondary">{style.label}</span>
+              <span className="ml-auto rounded border border-outline px-2 py-0.5 font-mono text-[11px] text-muted">
                 risk: {evaluation.risk}
               </span>
             </div>
-            <p className="mt-3 text-sm leading-6 text-slate-200">{evaluation.feedback}</p>
-            <p className="mt-2 font-mono text-[11px] text-slate-500">rule: {evaluation.policy}</p>
+            <p className="mt-3 text-sm leading-6 text-secondary">{evaluation.feedback}</p>
+            <p className="mt-2 font-mono text-[11px] text-subdued">rule: {evaluation.policy}</p>
           </div>
-          <pre className="mt-3 flex-1 overflow-x-auto rounded-lg border border-white/[0.06] bg-[#05070d] p-3 font-mono text-[11.5px] leading-5 text-slate-400">
+          <pre className="mt-3 flex-1 overflow-x-auto rounded-lg border border-divider/70 bg-background p-3 font-mono text-[11.5px] leading-5 text-muted">
             <code>{JSON.stringify(response, null, 2)}</code>
           </pre>
         </div>

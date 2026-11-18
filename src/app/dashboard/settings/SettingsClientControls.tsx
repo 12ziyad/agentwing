@@ -21,7 +21,7 @@ export function CopyButton({ value }: { value: string }) {
     <button
       type="button"
       onClick={copy}
-      className="rounded border border-white/[0.1] px-2 py-0.5 text-[10px] text-slate-500 transition hover:text-white"
+      className="rounded border border-outline px-2 py-0.5 text-[10px] text-subdued transition hover:text-foreground"
     >
       {copied ? "Copied" : "Copy"}
     </button>
@@ -71,7 +71,7 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
     <>
       <div className="rounded-md border border-red-300/20 bg-red-400/[0.04] p-4">
         <p className="text-sm font-semibold text-red-100">Delete account</p>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
           Immediately revokes every API key in this workspace and signs out every session, then schedules your workspace, runs, receipts and settings for erasure. Access is withdrawn straight away and cannot be restored.
         </p>
 
@@ -87,18 +87,18 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
           {requested ? "Deletion requested" : "Delete account"}
         </button>
 
-        {status && <p className="mt-3 text-sm text-slate-300">{status}</p>}
+        {status && <p className="mt-3 text-sm text-secondary">{status}</p>}
       </div>
 
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-md border border-red-300/25 bg-[#080b12] p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-md border border-red-300/25 bg-surface p-6 shadow-2xl">
             <p className="text-lg font-semibold text-red-100">Confirm account deletion</p>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
+            <p className="mt-3 text-sm leading-6 text-secondary">
               Every API key in this workspace will be revoked and every session signed out immediately — including this one. Your stored data is then scheduled for erasure. This cannot be undone. Type DELETE to confirm.
             </p>
 
-            <label htmlFor="delete-confirmation" className="mt-5 block text-xs font-medium text-slate-400">
+            <label htmlFor="delete-confirmation" className="mt-5 block text-xs font-medium text-muted">
               Type DELETE to confirm
             </label>
             <input
@@ -107,7 +107,7 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
               onChange={(event) => setConfirmation(event.target.value)}
               disabled={busy || requested}
               placeholder="DELETE"
-              className="mt-2 min-h-11 w-full rounded-md border border-red-300/20 bg-[#05070d] px-3 font-mono text-sm text-slate-100 outline-none focus:border-red-300/40 disabled:opacity-60"
+              className="mt-2 min-h-11 w-full rounded-md border border-red-300/20 bg-background px-3 font-mono text-sm text-foreground outline-none focus:border-red-300/40 disabled:opacity-60"
               autoFocus
             />
 
@@ -119,7 +119,7 @@ export function DangerZoneControls({ deletionRequestedAt }: { deletionRequestedA
                   setConfirmOpen(false);
                   setConfirmation("");
                 }}
-                className="rounded-md border border-white/[0.1] px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white disabled:opacity-50"
+                className="rounded-md border border-outline px-4 py-2 text-sm font-semibold text-secondary transition hover:text-foreground disabled:opacity-50"
               >
                 Cancel
               </button>

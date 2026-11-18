@@ -34,44 +34,44 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Overview</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-subdued">Overview</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
           {workspace ? workspace.name : "Control plane"}
         </h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-muted">
           AgentWing is controlling live action runs: policy checks, approval gates, sandbox routing, restore points, logs, and receipts.
         </p>
       </div>
 
       <RunStatsGrid stats={runStats} actionsChecked={stats.total} receiptsCreated={stats.receiptsCreated} />
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
+      <section className="rounded-md border border-divider bg-surface p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-white">Latest execution run</p>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            <p className="text-sm font-semibold text-foreground">Latest execution run</p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">
               AgentWing is the execution gate between agents and tools. It blocks dangerous actions, routes risky actions to sandbox, requests approval when needed, requires restore points for sensitive changes, and records the full receipt.
             </p>
           </div>
-          <Link href="/dashboard/runs" className="rounded border border-white/[0.1] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:text-white">
+          <Link href="/dashboard/runs" className="rounded border border-outline px-3 py-2 text-xs font-semibold text-secondary transition hover:text-foreground">
             View runs
           </Link>
         </div>
         {latestRun ? (
-          <Link href={`/dashboard/runs/${latestRun.runId}`} className="mt-5 grid gap-3 rounded border border-white/[0.06] bg-[#05070d] p-4 transition hover:border-white/[0.12] md:grid-cols-[1fr_auto]">
+          <Link href={`/dashboard/runs/${latestRun.runId}`} className="mt-5 grid gap-3 rounded border border-divider/70 bg-background p-4 transition hover:border-outline md:grid-cols-[1fr_auto]">
             <div className="min-w-0">
-              <p className="truncate font-mono text-sm text-cyan-100">
+              <p className="truncate font-mono text-sm text-brand-text">
                 {latestRun.action.command || latestRun.action.target || latestRun.action.description || latestRun.action.actionType}
               </p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-muted">
                 {latestRun.decision} / {latestRun.status} / {latestRun.executionTarget}
               </p>
             </div>
-            <span className="text-xs font-semibold text-cyan-100">View run</span>
+            <span className="text-xs font-semibold text-brand-text">View run</span>
           </Link>
         ) : (
-          <div className="mt-5 rounded border border-white/[0.06] bg-[#05070d] p-4 text-sm text-slate-400">
-            No runs yet. Call <code className="font-mono text-cyan-100">POST /api/v1/execute-action</code> to create the first guarded lifecycle.
+          <div className="mt-5 rounded border border-divider/70 bg-background p-4 text-sm text-muted">
+            No runs yet. Call <code className="font-mono text-brand-text">POST /api/v1/execute-action</code> to create the first guarded lifecycle.
           </div>
         )}
       </section>
@@ -102,21 +102,21 @@ export default async function DashboardPage() {
       </div>
 
       {/* Onboarding */}
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-        <p className="text-sm font-semibold text-white">Getting started</p>
+      <section className="rounded-md border border-divider bg-surface p-5">
+        <p className="text-sm font-semibold text-foreground">Getting started</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {onboarding.map(({ step, label, href, copy }) => (
             <Link
               key={step}
               href={href}
-              className="flex items-start gap-3 rounded border border-white/[0.06] bg-[#05070d] p-3 transition hover:border-white/[0.12]"
+              className="flex items-start gap-3 rounded border border-divider/70 bg-background p-3 transition hover:border-outline"
             >
-              <span className="flex size-6 shrink-0 items-center justify-center rounded border border-cyan-300/20 bg-cyan-300/[0.08] font-mono text-xs text-cyan-100">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded border border-brand-outline bg-brand-surface font-mono text-xs text-brand-text">
                 {step}
               </span>
               <div>
-                <p className="text-sm font-semibold text-white">{label}</p>
-                <p className="mt-0.5 text-xs leading-5 text-slate-500">{copy}</p>
+                <p className="text-sm font-semibold text-foreground">{label}</p>
+                <p className="mt-0.5 text-xs leading-5 text-subdued">{copy}</p>
               </div>
             </Link>
           ))}
@@ -124,8 +124,8 @@ export default async function DashboardPage() {
       </section>
 
       <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-        <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <p className="text-sm font-semibold text-white">Execution flow</p>
+        <section className="rounded-md border border-divider bg-surface p-5">
+          <p className="text-sm font-semibold text-foreground">Execution flow</p>
           <div className="mt-4 space-y-2">
             {[
               "Agent proposes action",
@@ -134,18 +134,18 @@ export default async function DashboardPage() {
               "Approval, sandbox, checkpoint, or external runner path selected",
               "Execution result, logs, and receipt sealed",
             ].map((step, index) => (
-              <div key={step} className="flex items-start gap-3 rounded border border-white/[0.06] bg-[#05070d] p-3">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded border border-cyan-300/20 bg-cyan-300/[0.08] font-mono text-xs text-cyan-100">
+              <div key={step} className="flex items-start gap-3 rounded border border-divider/70 bg-background p-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded border border-brand-outline bg-brand-surface font-mono text-xs text-brand-text">
                   {index + 1}
                 </span>
-                <span className="text-sm text-slate-300">{step}</span>
+                <span className="text-sm text-secondary">{step}</span>
               </div>
             ))}
           </div>
         </section>
-        <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <p className="text-sm font-semibold text-white">Quick API test</p>
-          <pre className="mt-4 overflow-x-auto rounded border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-6 text-slate-300">
+        <section className="rounded-md border border-divider bg-surface p-5">
+          <p className="text-sm font-semibold text-foreground">Quick API test</p>
+          <pre className="mt-4 overflow-x-auto rounded border border-divider bg-background p-3 text-xs leading-6 text-secondary">
 {`POST /api/v1/check-action
 Authorization: Bearer YOUR_KEY
 
@@ -159,7 +159,7 @@ Authorization: Bearer YOUR_KEY
     "risk": "high",
     "nextStep": "Re-plan." }`}
           </pre>
-          <Link href="/dashboard/integrations" className="mt-4 inline-block text-xs font-semibold text-cyan-200 hover:text-cyan-100">
+          <Link href="/dashboard/integrations" className="mt-4 inline-block text-xs font-semibold text-brand hover:text-brand-text">
             Full integration guide →
           </Link>
         </section>
@@ -193,9 +193,9 @@ function RunStatsGrid({
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
       {items.map(([label, value]) => (
-        <article key={label} className="rounded-md border border-white/[0.08] bg-[#080b12] p-4">
-          <p className="text-xs font-medium text-slate-400">{label}</p>
-          <p className="mt-3 text-2xl font-semibold tracking-tight text-white">{value}</p>
+        <article key={label} className="rounded-md border border-divider bg-surface p-4">
+          <p className="text-xs font-medium text-muted">{label}</p>
+          <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
         </article>
       ))}
     </div>
@@ -211,14 +211,14 @@ function StatusCard({
   status: "ok" | "warn" | "empty";
   suffix?: string;
 }) {
-  const border = status === "warn" ? "border-amber-300/20 bg-amber-300/[0.04]" : "border-white/[0.08] bg-[#080b12]";
+  const border = status === "warn" ? "border-amber-300/20 bg-amber-300/[0.04]" : "border-divider bg-surface";
   return (
-    <Link href={href} className={`rounded-md border p-5 transition hover:border-white/[0.14] ${border}`}>
-      <p className="text-xs font-medium text-slate-400">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${status === "warn" ? "text-amber-200" : "text-white"}`}>
+    <Link href={href} className={`rounded-md border p-5 transition hover:border-outline ${border}`}>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className={`mt-2 text-2xl font-semibold ${status === "warn" ? "text-amber-200" : "text-foreground"}`}>
         {value}
       </p>
-      {suffix && <p className="mt-1 text-xs text-slate-500">{suffix}</p>}
+      {suffix && <p className="mt-1 text-xs text-subdued">{suffix}</p>}
     </Link>
   );
 }

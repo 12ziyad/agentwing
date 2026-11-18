@@ -13,37 +13,37 @@ const measures = [
 
 export default function SecurityPage() {
   return (
-    <div className="min-h-screen bg-[#05070d] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <PublicNav />
       <main className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Security</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">Security</h1>
-        <p className="mt-4 text-base leading-7 text-slate-400">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">Security</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">Security</h1>
+        <p className="mt-4 text-base leading-7 text-muted">
           AgentWing is infrastructure for AI agent control. We take security seriously.
         </p>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           {measures.map(({ title, body }) => (
-            <div key={title} className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
+            <div key={title} className="rounded-md border border-divider bg-surface p-5">
               <div className="flex items-center gap-2">
                 <span className="size-2 rounded-full bg-emerald-400 shrink-0" />
-                <p className="font-semibold text-white">{title}</p>
+                <p className="font-semibold text-foreground">{title}</p>
               </div>
-              <p className="mt-2 text-sm leading-6 text-slate-400">{body}</p>
+              <p className="mt-2 text-sm leading-6 text-muted">{body}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-8 rounded-md border border-amber-300/20 bg-amber-300/[0.04] p-6">
           <p className="font-semibold text-amber-200">Reporting security issues</p>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-muted">
             If you discover a security vulnerability in AgentWing, please report it responsibly to{" "}
-            <a href="mailto:founder@gpmai.dev" className="text-cyan-200 underline">founder@gpmai.dev</a>.
+            <a href="mailto:founder@gpmai.dev" className="text-brand underline">founder@gpmai.dev</a>.
             Do not open public GitHub issues for security vulnerabilities.
           </p>
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm text-muted">
             For code issues and non-security bugs:{" "}
-            <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="text-cyan-200 underline">github.com/12ziyad</a>
+            <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="text-brand underline">github.com/12ziyad</a>
           </p>
         </div>
       </main>

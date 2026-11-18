@@ -20,19 +20,19 @@ const decisionClass: Record<string, string> = {
 
 const statusClass: Record<string, string> = {
   completed: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
-  execution_skipped: "border-slate-300/15 bg-slate-300/[0.06] text-slate-300",
+  execution_skipped: "border-slate-300/15 bg-slate-300/[0.06] text-secondary",
   blocked: "border-red-300/25 bg-red-400/[0.08] text-red-100",
   failed: "border-red-300/25 bg-red-400/[0.08] text-red-100",
   waiting_approval: "border-amber-300/25 bg-amber-300/[0.08] text-amber-100",
   approved: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
   rejected: "border-red-300/25 bg-red-400/[0.08] text-red-100",
   waiting_sandbox: "border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-100",
-  running: "border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-100",
+  running: "border-brand-outline bg-brand-surface text-brand-text",
   restore_point_required: "border-violet-300/25 bg-violet-300/[0.08] text-violet-100",
   checkpoint_created: "border-violet-300/25 bg-violet-300/[0.08] text-violet-100",
-  external_runner_required: "border-slate-300/15 bg-slate-300/[0.06] text-slate-300",
-  checked: "border-slate-300/15 bg-slate-300/[0.06] text-slate-300",
-  proposed: "border-slate-300/15 bg-slate-300/[0.06] text-slate-300",
+  external_runner_required: "border-slate-300/15 bg-slate-300/[0.06] text-secondary",
+  checked: "border-slate-300/15 bg-slate-300/[0.06] text-secondary",
+  proposed: "border-slate-300/15 bg-slate-300/[0.06] text-secondary",
 };
 
 const riskClass: Record<string, string> = {
@@ -54,26 +54,26 @@ export default async function RunDetailPage({ params }: { params: Promise<{ runI
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <Link href="/dashboard/runs" className="text-xs font-semibold text-slate-400 transition hover:text-white">
+        <Link href="/dashboard/runs" className="text-xs font-semibold text-muted transition hover:text-foreground">
           Back to runs
         </Link>
-        <span className="text-slate-600">/</span>
-        <p className="font-mono text-xs text-slate-500">{run.runId}</p>
+        <span className="text-subdued">/</span>
+        <p className="font-mono text-xs text-subdued">{run.runId}</p>
       </div>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
+      <section className="rounded-md border border-divider bg-surface p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200">Action run</p>
-            <h1 className="mt-2 break-words text-2xl font-semibold tracking-tight text-white">{summary}</h1>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">Action run</p>
+            <h1 className="mt-2 break-words text-2xl font-semibold tracking-tight text-foreground">{summary}</h1>
+            <p className="mt-2 text-sm text-muted">
               Proposed by {run.action.agentId ?? "agent"} on {new Date(run.createdAt).toLocaleString()}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Chip className={decisionClass[run.decision]}>{run.decision}</Chip>
             <Chip className={statusClass[run.status] ?? statusClass.checked}>{run.status}</Chip>
-            <span className={`px-2 py-1 text-xs font-semibold ${riskClass[run.risk] ?? "text-slate-300"}`}>
+            <span className={`px-2 py-1 text-xs font-semibold ${riskClass[run.risk] ?? "text-secondary"}`}>
               {run.risk} risk
             </span>
           </div>
@@ -98,15 +98,15 @@ export default async function RunDetailPage({ params }: { params: Promise<{ runI
 
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-5">
-          <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Proposed action JSON</p>
-            <pre className="mt-4 max-h-96 overflow-auto rounded border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-5 text-slate-300">
+          <section className="rounded-md border border-divider bg-surface p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Proposed action JSON</p>
+            <pre className="mt-4 max-h-96 overflow-auto rounded border border-divider bg-background p-3 text-xs leading-5 text-secondary">
               {JSON.stringify(run.action, null, 2)}
             </pre>
           </section>
 
-          <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Policy evaluation</p>
+          <section className="rounded-md border border-divider bg-surface p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Policy evaluation</p>
             <div className="mt-4 space-y-3">
               <Field label="Decision" value={run.decision} />
               <Field label="Risk" value={run.risk} />
@@ -117,26 +117,26 @@ export default async function RunDetailPage({ params }: { params: Promise<{ runI
         </div>
 
         <div className="space-y-5">
-          <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Lifecycle timeline</p>
+          <section className="rounded-md border border-divider bg-surface p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Lifecycle timeline</p>
             <div className="mt-4 space-y-3">
               {timeline(run, events).map((item, index) => (
-                <div key={`${item.label}-${index}`} className="flex gap-3 rounded border border-white/[0.06] bg-[#05070d] p-3">
+                <div key={`${item.label}-${index}`} className="flex gap-3 rounded border border-divider/70 bg-background p-3">
                   <TimelineIcon state={item.state} />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white">{item.label}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">{item.message}</p>
-                    {item.time && <p className="mt-1 text-[10px] text-slate-600">{new Date(item.time).toLocaleString()}</p>}
+                    <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted">{item.message}</p>
+                    {item.time && <p className="mt-1 text-[10px] text-subdued">{new Date(item.time).toLocaleString()}</p>}
                   </div>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
+          <section className="rounded-md border border-divider bg-surface p-5">
             <div className="flex items-center gap-2">
-              <Terminal className="size-4 text-cyan-200" />
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Execution logs</p>
+              <Terminal className="size-4 text-brand" />
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Execution logs</p>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <Field label="Exit code" value={run.exitCode === undefined ? "-" : String(run.exitCode)} mono />
@@ -160,8 +160,8 @@ function Chip({ children, className = "" }: { children: React.ReactNode; classNa
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="min-w-0">
-      <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-slate-500">{label}</p>
-      <p className={mono ? "mt-1 break-all font-mono text-xs text-cyan-100" : "mt-1 break-words text-sm text-slate-200"}>
+      <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-subdued">{label}</p>
+      <p className={mono ? "mt-1 break-all font-mono text-xs text-brand-text" : "mt-1 break-words text-sm text-secondary"}>
         {value}
       </p>
     </div>
@@ -169,11 +169,11 @@ function Field({ label, value, mono = false }: { label: string; value: string; m
 }
 
 function LogBlock({ label, value, tone }: { label: string; value?: string; tone: "default" | "warn" | "error" }) {
-  const color = tone === "error" ? "text-red-100" : tone === "warn" ? "text-amber-100" : "text-slate-300";
+  const color = tone === "error" ? "text-red-100" : tone === "warn" ? "text-amber-100" : "text-secondary";
   return (
     <div className="mt-4">
-      <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-slate-500">{label}</p>
-      <pre className={`mt-2 max-h-64 overflow-auto rounded border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-5 ${color}`}>
+      <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-subdued">{label}</p>
+      <pre className={`mt-2 max-h-64 overflow-auto rounded border border-divider bg-background p-3 text-xs leading-5 ${color}`}>
         {value?.trim() ? value : "No output captured."}
       </pre>
     </div>
@@ -184,7 +184,7 @@ function TimelineIcon({ state }: { state: TimelineState }) {
   if (state === "done") return <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-200" />;
   if (state === "wait") return <Clock className="mt-0.5 size-4 shrink-0 text-amber-200" />;
   if (state === "fail") return <XCircle className="mt-0.5 size-4 shrink-0 text-red-200" />;
-  return <Circle className="mt-0.5 size-4 shrink-0 text-slate-600" />;
+  return <Circle className="mt-0.5 size-4 shrink-0 text-subdued" />;
 }
 
 function findEvent(events: ExecutionEvent[], type: string) {

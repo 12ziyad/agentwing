@@ -15,6 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://agentwing.gpmai.dev"),
   title: "AgentWing - Guarded execution for AI agents",
   description: "AgentWing checks and routes AI-agent execution before tools run: policy decisions, approvals, sandbox routing, restore points, logs, and audit receipts.",
   icons: {
@@ -39,7 +40,7 @@ export default function RootLayout({
       lang="en"
       className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="h-full bg-[#05070d] text-slate-100">{children}</body>
+      <body className="h-full bg-background text-foreground">{children}</body>
     </html>
   );
 }

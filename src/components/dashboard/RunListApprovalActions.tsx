@@ -45,7 +45,7 @@ export function RunListApprovalActions({ runId }: { runId: string }) {
         <XCircle className="size-3.5" />
         {busy === "reject" ? "Rejecting" : "Reject"}
       </button>
-      <Link href={`/dashboard/runs/${runId}`} className="rounded border border-white/[0.1] px-2 py-1.5 text-[11px] font-semibold text-cyan-100 transition hover:text-white">
+      <Link href={`/dashboard/runs/${runId}`} className="rounded border border-outline px-2 py-1.5 text-[11px] font-semibold text-brand-text transition hover:text-foreground">
         View
       </Link>
     </div>

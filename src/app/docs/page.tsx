@@ -133,46 +133,46 @@ POST /api/v1/policies
 
 export default function DocsPage() {
   return (
-    <main className="min-h-screen bg-[#05070d] text-slate-100">
-      <header className="border-b border-white/[0.08] bg-[#080b12]">
+    <main className="min-h-screen bg-background text-foreground">
+      <header className="border-b border-divider bg-surface">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <Link href="/" className="text-sm font-semibold text-white">
+          <Link href="/" className="text-sm font-semibold text-foreground">
             AgentWing
           </Link>
           <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="rounded-md border border-white/[0.1] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:text-white">
+            <Link href="/dashboard" className="rounded-md border border-outline px-3 py-2 text-xs font-semibold text-secondary transition hover:text-foreground">
               Dashboard
             </Link>
-            <a href="/api/auth/signin/google?next=/dashboard" className="rounded-md border border-cyan-300/25 bg-cyan-300 px-3 py-2 text-xs font-semibold text-[#031018]">
+            <a href="/api/auth/signin/google?next=/dashboard" className="rounded-md border border-brand-outline bg-brand px-3 py-2 text-xs font-semibold text-brand-ink">
               Sign up free
             </a>
           </div>
         </div>
       </header>
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">Documentation</p>
-        <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-white">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand">Documentation</p>
+        <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-foreground">
           AgentWing — Runtime control layer for AI agents
         </h1>
-        <p className="mt-5 max-w-3xl text-base leading-7 text-slate-300">
+        <p className="mt-5 max-w-3xl text-base leading-7 text-secondary">
           Policy decisions, approval gates, BYOK sandbox execution, execution logs, and audit receipts — before your tools run.
         </p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {["Policy checks", "Approval gates", "BYOK sandbox (E2B)", "Custom policies", "Structured feedback", "Audit receipts"].map((item) => (
-            <div key={item} className="rounded-md border border-white/[0.08] bg-[#080b12] p-4 text-sm font-semibold text-white">
+            <div key={item} className="rounded-md border border-divider bg-surface p-4 text-sm font-semibold text-foreground">
               {item}
             </div>
           ))}
         </div>
 
         <DocSection title="0. Approval gates">
-          <p className="mb-3 text-sm leading-6 text-slate-300">
-            When a decision is <code className="font-mono text-cyan-100">approval_required</code>, the run parks at{" "}
-            <code className="font-mono text-cyan-100">waiting_approval</code> and the response tells your agent where a
+          <p className="mb-3 text-sm leading-6 text-secondary">
+            When a decision is <code className="font-mono text-brand-text">approval_required</code>, the run parks at{" "}
+            <code className="font-mono text-brand-text">waiting_approval</code> and the response tells your agent where a
             human can approve and how to poll for the outcome.
           </p>
-          <div className="mb-4 rounded border border-cyan-300/20 bg-cyan-300/[0.04] px-3 py-2 text-xs leading-5 text-cyan-100">
+          <div className="mb-4 rounded border border-brand-outline bg-brand/5 px-3 py-2 text-xs leading-5 text-brand-text">
             <strong className="font-semibold">The response carries no approval credential.</strong> The agent proposing
             an action cannot approve it — that separation is the whole point of an approval gate, so approval happens
             through a separately-authenticated human session in the dashboard.
@@ -188,33 +188,33 @@ export default function DocsPage() {
               ["rate_limited (429)", "Too many requests in the current window. Honour Retry-After."],
               ["plan_limit_reached (429)", "The API key has used its plan allowance."],
             ].map(([code, desc]) => (
-              <div key={code} className="rounded border border-white/[0.08] bg-[#05070d] p-3">
+              <div key={code} className="rounded border border-divider bg-background p-3">
                 <p className="font-mono text-xs text-red-300">{code}</p>
-                <p className="mt-1 text-xs text-slate-400">{desc}</p>
+                <p className="mt-1 text-xs text-muted">{desc}</p>
               </div>
             ))}
           </div>
         </DocSection>
 
         <DocSection title="1. Sign up free">
-          <p className="text-sm leading-6 text-slate-300">
+          <p className="text-sm leading-6 text-secondary">
             Sign up at{" "}
-            <a href="https://agentwing.gpmai.dev" className="font-mono text-cyan-100 underline">agentwing.gpmai.dev</a>{" "}
-            using Google. No password needed — click <strong className="text-white">Continue with Google</strong>.
+            <a href="https://agentwing.gpmai.dev" className="font-mono text-brand-text underline">agentwing.gpmai.dev</a>{" "}
+            using Google. No password needed — click <strong className="text-foreground">Continue with Google</strong>.
             Your workspace, projects, API keys, receipts, and sandbox config are all user-scoped.
           </p>
         </DocSection>
 
         <DocSection title="2. Create a project">
-          <p className="text-sm leading-6 text-slate-300">
-            Go to <Link href="/dashboard/projects" className="font-mono text-cyan-100">Dashboard → Projects</Link> and create a project.
+          <p className="text-sm leading-6 text-secondary">
+            Go to <Link href="/dashboard/projects" className="font-mono text-brand-text">Dashboard → Projects</Link> and create a project.
             Projects scope your API keys, policies, receipts, and usage.
           </p>
         </DocSection>
 
         <DocSection title="3. Generate an API key">
-          <p className="text-sm leading-6 text-slate-300">
-            Go to <Link href="/dashboard/api-keys" className="font-mono text-cyan-100">Dashboard → API Keys</Link>, select a project, and click Generate key.
+          <p className="text-sm leading-6 text-secondary">
+            Go to <Link href="/dashboard/api-keys" className="font-mono text-brand-text">Dashboard → API Keys</Link>, select a project, and click Generate key.
             Copy the full key immediately — it is only shown once. Existing keys show only a masked prefix.
           </p>
           <div className="mt-3 rounded border border-amber-300/20 bg-amber-300/[0.04] px-3 py-2 text-xs text-amber-100">
@@ -223,7 +223,7 @@ export default function DocsPage() {
         </DocSection>
 
         <DocSection title="4. Call /api/v1/check-action">
-          <p className="mb-4 text-sm leading-6 text-slate-300">
+          <p className="mb-4 text-sm leading-6 text-secondary">
             Before executing any agent tool call, send the proposed action to AgentWing. The response tells you what to do.
           </p>
           <CodeBlock label="cURL" code={curlExample} />
@@ -233,8 +233,8 @@ export default function DocsPage() {
         </DocSection>
 
         <DocSection title="4b. Or create a managed action run">
-          <p className="mb-4 text-sm leading-6 text-slate-300">
-            Use <code className="font-mono text-cyan-100">/api/v1/execute-action</code> when you want AgentWing to create a full lifecycle record. Runs are visible at <Link href="/dashboard/runs" className="font-mono text-cyan-100">Dashboard - Runs</Link>.
+          <p className="mb-4 text-sm leading-6 text-secondary">
+            Use <code className="font-mono text-brand-text">/api/v1/execute-action</code> when you want AgentWing to create a full lifecycle record. Runs are visible at <Link href="/dashboard/runs" className="font-mono text-brand-text">Dashboard - Runs</Link>.
           </p>
           <CodeBlock label="cURL" code={executeActionExample} />
         </DocSection>
@@ -248,61 +248,61 @@ export default function DocsPage() {
               ["sandbox_required", "Run the action in an isolated sandbox first."],
               ["restore_point_required", "Create a restore point before mutating files or state."],
             ].map(([decision, copy]) => (
-              <div key={decision} className="rounded border border-white/[0.08] bg-[#05070d] p-3">
-                <p className="font-mono text-sm text-cyan-100">{decision}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-400">{copy}</p>
+              <div key={decision} className="rounded border border-divider bg-background p-3">
+                <p className="font-mono text-sm text-brand-text">{decision}</p>
+                <p className="mt-2 text-sm leading-6 text-muted">{copy}</p>
               </div>
             ))}
           </div>
         </DocSection>
 
         <DocSection title="6. Custom policies">
-          <p className="mb-4 text-sm leading-6 text-slate-300">
-            Go to <Link href="/dashboard/policies" className="font-mono text-cyan-100">Dashboard → Policies</Link> to create project-specific policies.
+          <p className="mb-4 text-sm leading-6 text-secondary">
+            Go to <Link href="/dashboard/policies" className="font-mono text-brand-text">Dashboard → Policies</Link> to create project-specific policies.
             Critical default safety blocks run first. Custom policies then match before the remaining AgentWing ruleset.
             Use priority (lower = first) to control custom policy order.
           </p>
-          <p className="mb-3 text-sm text-slate-300">Matching: empty field = match any. Target and command patterns support <code className="font-mono text-cyan-100">*</code> wildcards.</p>
+          <p className="mb-3 text-sm text-secondary">Matching: empty field = match any. Target and command patterns support <code className="font-mono text-brand-text">*</code> wildcards.</p>
           <CodeBlock label="Example — create via API" code={customPolicyExample} />
         </DocSection>
 
         <DocSection title="7. Connect E2B BYOK sandbox">
-          <p className="text-sm leading-6 text-slate-300">
-            Go to <Link href="/dashboard/sandboxes" className="font-mono text-cyan-100">Dashboard → Sandboxes</Link> and paste your E2B API key.
+          <p className="text-sm leading-6 text-secondary">
+            Go to <Link href="/dashboard/sandboxes" className="font-mono text-brand-text">Dashboard → Sandboxes</Link> and paste your E2B API key.
             The key is stored encrypted server-side using AES-GCM with your configured{" "}
-            <code className="font-mono text-cyan-100">AGENTWING_SANDBOX_SECRET</code>.
+            <code className="font-mono text-brand-text">AGENTWING_SANDBOX_SECRET</code>.
             It is never returned to the browser.
           </p>
-          <div className="mt-3 space-y-2 text-sm text-slate-300">
+          <div className="mt-3 space-y-2 text-sm text-secondary">
             <p>When <code className="font-mono text-cyan-100">sandbox_required</code> is returned, AgentWing will use your saved key to run the action in E2B.</p>
-            <p>Use <strong className="text-white">Test connection</strong> to verify the key works.</p>
+            <p>Use <strong className="text-foreground">Test connection</strong> to verify the key works.</p>
           </div>
         </DocSection>
 
         <DocSection title="8. Receipts and usage">
-          <p className="text-sm leading-6 text-slate-300">
-            Every <code className="font-mono text-cyan-100">/api/v1/check-action</code> call and managed action run creates an audit receipt.
-            Go to <Link href="/dashboard/receipts" className="font-mono text-cyan-100">Dashboard → Receipts</Link> to view them.
+          <p className="text-sm leading-6 text-secondary">
+            Every <code className="font-mono text-brand-text">/api/v1/check-action</code> call and managed action run creates an audit receipt.
+            Go to <Link href="/dashboard/receipts" className="font-mono text-brand-text">Dashboard → Receipts</Link> to view them.
             Click any receipt for the full decision detail, sandbox output, and metadata.
             <br />
-            <Link href="/dashboard/usage" className="font-mono text-cyan-100">Dashboard → Usage</Link> shows workspace-level counters for action checks, sandbox runs, and receipts.
+            <Link href="/dashboard/usage" className="font-mono text-brand-text">Dashboard → Usage</Link> shows workspace-level counters for action checks, sandbox runs, and receipts.
           </p>
         </DocSection>
 
         <DocSection title="9. Security notes">
-          <ul className="space-y-2 text-sm leading-6 text-slate-300">
+          <ul className="space-y-2 text-sm leading-6 text-secondary">
             <li>• API keys are shown once and stored as a SHA-256 hash. They cannot be retrieved after generation.</li>
 
             <li>• E2B keys are encrypted server-side with AES-GCM. The raw key is never returned to the browser.</li>
             <li>• Command output, error text, and event metadata are redacted for known credential formats before they are stored or returned.</li>
             <li>• Every query carrying tenant data requires a workspace, enforced by the type signatures rather than by convention.</li>
-            <li>• The admin console requires a verified admin email set in <code className="font-mono text-cyan-100">ADMIN_EMAILS</code>.</li>
+            <li>• The admin console requires a verified admin email set in <code className="font-mono text-brand-text">ADMIN_EMAILS</code>.</li>
             <li>• Authentication is Google OAuth only. No password is stored.</li>
           </ul>
         </DocSection>
 
         <DocSection title="10. Required secrets (Cloudflare)">
-          <p className="mb-3 text-sm text-slate-300">Set these via <code className="font-mono text-cyan-100">wrangler secret put &lt;NAME&gt;</code>:</p>
+          <p className="mb-3 text-sm text-secondary">Set these via <code className="font-mono text-brand-text">wrangler secret put &lt;NAME&gt;</code>:</p>
           <div className="space-y-2">
             {[
               ["GOOGLE_CLIENT_ID", "Google OAuth client ID"],
@@ -311,9 +311,9 @@ export default function DocsPage() {
               ["AGENTWING_SANDBOX_SECRET", "Random 32-byte base64 secret for E2B key encryption"],
               ["ADMIN_EMAILS", "Comma-separated admin emails, e.g. you@example.com"],
             ].map(([name, desc]) => (
-              <div key={name} className="flex gap-3 rounded border border-white/[0.08] bg-[#05070d] px-3 py-2">
-                <code className="font-mono text-xs text-cyan-100">{name}</code>
-                <span className="text-xs text-slate-400">{desc}</span>
+              <div key={name} className="flex gap-3 rounded border border-divider bg-background px-3 py-2">
+                <code className="font-mono text-xs text-brand-text">{name}</code>
+                <span className="text-xs text-muted">{desc}</span>
               </div>
             ))}
           </div>
@@ -325,8 +325,8 @@ export default function DocsPage() {
 
 function DocSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-8 rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-      <h2 className="text-lg font-semibold text-white">{title}</h2>
+    <section className="mt-8 rounded-md border border-divider bg-surface p-5">
+      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -335,8 +335,8 @@ function DocSection({ title, children }: { title: string; children: React.ReactN
 function CodeBlock({ label, code }: { label: string; code: string }) {
   return (
     <div className="mb-4">
-      <p className="mb-2 text-xs font-semibold text-slate-500">{label}</p>
-      <pre className="overflow-x-auto rounded-md border border-white/[0.08] bg-[#05070d] p-4 text-xs leading-6 text-slate-300">{code}</pre>
+      <p className="mb-2 text-xs font-semibold text-subdued">{label}</p>
+      <pre className="overflow-x-auto rounded-md border border-divider bg-background p-4 text-xs leading-6 text-secondary">{code}</pre>
     </div>
   );
 }

@@ -75,7 +75,7 @@ const emptySandboxConfig: SandboxConfig = {
 };
 
 function cardClass() {
-  return "rounded-md border border-white/[0.08] bg-[#080b12] p-5";
+  return "rounded-md border border-divider bg-surface p-5";
 }
 
 function formatDate(value?: string) {
@@ -96,7 +96,7 @@ function maskedProjectId(projectId?: string) {
 function statusPillClass(kind: "connected" | "empty" | "success" | "failed") {
   const classes = {
     connected: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
-    empty: "border-slate-300/15 bg-slate-300/[0.06] text-slate-300",
+    empty: "border-slate-300/15 bg-slate-300/[0.06] text-secondary",
     success: "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100",
     failed: "border-amber-300/25 bg-amber-300/[0.08] text-amber-100",
   };
@@ -134,7 +134,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className={className ?? "inline-flex items-center gap-2 rounded border border-white/[0.1] px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:text-white"}
+      className={className ?? "inline-flex items-center gap-2 rounded border border-outline px-2.5 py-1.5 text-xs font-semibold text-secondary transition hover:border-outline hover:text-foreground"}
     >
       {state === "copied" ? (
         <>
@@ -236,28 +236,28 @@ export function ApiKeysPanel() {
       <section className={cardClass()}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-white">Generate API key</p>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="text-sm font-semibold text-foreground">Generate API key</p>
+            <p className="mt-1 text-sm text-muted">
               Select a project and generate a key. Copy it immediately — you cannot retrieve it later.
             </p>
           </div>
           <button
             type="button"
             onClick={generateKey}
-            className="inline-flex items-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-3 py-2 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200"
+            className="inline-flex items-center gap-2 rounded-md border border-brand-outline bg-brand px-3 py-2 text-sm font-semibold text-brand-ink transition hover:bg-brand-hover"
           >
             <KeyRound className="size-4" />
             Generate key
           </button>
         </div>
-        <label htmlFor="api-key-project" className="mt-5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+        <label htmlFor="api-key-project" className="mt-5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">
           Project
         </label>
         <select
           id="api-key-project"
           value={selectedProjectId}
           onChange={(e) => setSelectedProjectId(e.target.value)}
-          className="mt-2 min-h-11 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+          className="mt-2 min-h-11 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
         >
           <option value="">Select a project</option>
           {projects.map((p) => (
@@ -266,27 +266,27 @@ export function ApiKeysPanel() {
         </select>
 
         {newApiKey && (
-          <div className="mt-5 rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
-            <p className="mb-2 text-xs font-semibold text-cyan-200">New key — copy now, shown once only</p>
+          <div className="mt-5 rounded-md border border-brand-outline bg-brand/5 p-4">
+            <p className="mb-2 text-xs font-semibold text-brand">New key — copy now, shown once only</p>
             <div className="flex items-center gap-3">
-              <code className="min-w-0 flex-1 overflow-x-auto break-all font-mono text-sm text-cyan-100">{newApiKey}</code>
+              <code className="min-w-0 flex-1 overflow-x-auto break-all font-mono text-sm text-brand-text">{newApiKey}</code>
               <CopyButton text={newApiKey} />
             </div>
           </div>
         )}
 
         {status && (
-          <p className="mt-3 text-sm text-slate-400">{status}</p>
+          <p className="mt-3 text-sm text-muted">{status}</p>
         )}
       </section>
 
-      <section className="overflow-hidden rounded-md border border-white/[0.08] bg-[#080b12]">
-        <div className="border-b border-white/[0.08] bg-[#0c1019] px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+      <section className="overflow-hidden rounded-md border border-divider bg-surface">
+        <div className="border-b border-divider bg-raised px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
             Active keys ({activeKeys.length})
           </p>
         </div>
-        <div className="grid grid-cols-[1fr_1fr_0.8fr_0.9fr_auto] border-b border-white/[0.05] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+        <div className="grid grid-cols-[1fr_1fr_0.8fr_0.9fr_auto] border-b border-white/[0.05] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-subdued">
           <span>Prefix</span>
           <span>Project</span>
           <span>Plan</span>
@@ -294,17 +294,17 @@ export function ApiKeysPanel() {
           <span />
         </div>
         {activeKeys.length === 0 ? (
-          <p className="px-4 py-8 text-sm text-slate-400">No active keys for this project.</p>
+          <p className="px-4 py-8 text-sm text-muted">No active keys for this project.</p>
         ) : (
           activeKeys.map((key) => (
             <div
               key={key.apiKeyId}
-              className="grid grid-cols-[1fr_1fr_0.8fr_0.9fr_auto] items-center gap-3 border-b border-white/[0.06] px-4 py-3 text-sm last:border-b-0"
+              className="grid grid-cols-[1fr_1fr_0.8fr_0.9fr_auto] items-center gap-3 border-b border-divider/70 px-4 py-3 text-sm last:border-b-0"
             >
-              <span className="font-mono text-xs text-cyan-100">{key.keyPrefix}</span>
-              <span className="font-mono text-xs text-slate-400">{maskedProjectId(key.projectId)}</span>
-              <span className="text-slate-300">{key.planName}</span>
-              <span className="text-xs text-slate-500">{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : "Never"}</span>
+              <span className="font-mono text-xs text-brand-text">{key.keyPrefix}</span>
+              <span className="font-mono text-xs text-muted">{maskedProjectId(key.projectId)}</span>
+              <span className="text-secondary">{key.planName}</span>
+              <span className="text-xs text-subdued">{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : "Never"}</span>
               <button
                 type="button"
                 disabled={revoking === key.apiKeyId}
@@ -320,38 +320,38 @@ export function ApiKeysPanel() {
       </section>
 
       {revokedKeys.length > 0 && (
-        <section className="overflow-hidden rounded-md border border-white/[0.06] bg-[#080b12] opacity-60">
-          <div className="border-b border-white/[0.06] bg-[#0c1019] px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+        <section className="overflow-hidden rounded-md border border-divider/70 bg-surface opacity-60">
+          <div className="border-b border-divider/70 bg-raised px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-subdued">
               Revoked keys ({revokedKeys.length})
             </p>
           </div>
           {revokedKeys.map((key) => (
             <div
               key={key.apiKeyId}
-              className="flex items-center gap-4 border-b border-white/[0.04] px-4 py-3 text-sm last:border-b-0"
+              className="flex items-center gap-4 border-b border-divider/70 px-4 py-3 text-sm last:border-b-0"
             >
-              <span className="font-mono text-xs text-slate-500 line-through">{key.keyPrefix}</span>
-              <span className="text-xs text-slate-600">Revoked {formatDate(key.revokedAt)}</span>
+              <span className="font-mono text-xs text-subdued line-through">{key.keyPrefix}</span>
+              <span className="text-xs text-subdued">Revoked {formatDate(key.revokedAt)}</span>
             </div>
           ))}
         </section>
       )}
 
       <section className={cardClass()}>
-        <p className="text-sm font-semibold text-white">API example</p>
-        <p className="mt-2 text-xs text-slate-400">Replace AW_LIVE_KEY_HERE with your key. Never include real keys in docs or source code.</p>
+        <p className="text-sm font-semibold text-foreground">API example</p>
+        <p className="mt-2 text-xs text-muted">Replace AW_LIVE_KEY_HERE with your key. Never include real keys in docs or source code.</p>
         <div className="mt-4 space-y-3">
           <div>
-            <p className="mb-2 text-xs font-semibold text-slate-500">cURL</p>
-            <pre className="overflow-x-auto rounded-md border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-6 text-slate-300">{`curl -X POST https://agentwing.gpmai.dev/api/v1/check-action \\
+            <p className="mb-2 text-xs font-semibold text-subdued">cURL</p>
+            <pre className="overflow-x-auto rounded-md border border-divider bg-background p-3 text-xs leading-6 text-secondary">{`curl -X POST https://agentwing.gpmai.dev/api/v1/check-action \\
   -H "Authorization: Bearer AW_LIVE_KEY_HERE" \\
   -H "Content-Type: application/json" \\
   -d '{"actionType":"file_access","tool":"filesystem","target":".env"}'`}</pre>
           </div>
           <div>
-            <p className="mb-2 text-xs font-semibold text-slate-500">JavaScript fetch</p>
-            <pre className="overflow-x-auto rounded-md border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-6 text-slate-300">{`const r = await fetch("https://agentwing.gpmai.dev/api/v1/check-action", {
+            <p className="mb-2 text-xs font-semibold text-subdued">JavaScript fetch</p>
+            <pre className="overflow-x-auto rounded-md border border-divider bg-background p-3 text-xs leading-6 text-secondary">{`const r = await fetch("https://agentwing.gpmai.dev/api/v1/check-action", {
   method: "POST",
   headers: {
     "Authorization": "Bearer " + process.env.AGENTWING_API_KEY,
@@ -526,8 +526,8 @@ export function PoliciesPanel() {
       <section className={cardClass()}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-white">Prebuilt default policies</p>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            <p className="text-sm font-semibold text-foreground">Prebuilt default policies</p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">
               These production defaults are active in the policy engine. Mandatory hard blocks run before custom rules; custom policies can add workspace-specific routing after that.
             </p>
           </div>
@@ -541,10 +541,10 @@ export function PoliciesPanel() {
               key={policy.name}
               type="button"
               onClick={() => openCreate(policy)}
-              className="rounded-md border border-white/[0.08] bg-[#05070d] p-4 text-left transition hover:border-cyan-300/20"
+              className="rounded-md border border-divider bg-background p-4 text-left transition hover:border-brand-outline"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-semibold text-white">{policy.name}</p>
+                <p className="text-sm font-semibold text-foreground">{policy.name}</p>
                 {policy.mandatory && (
                   <span className="rounded border border-red-300/20 bg-red-400/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-red-100">
                     mandatory
@@ -555,12 +555,12 @@ export function PoliciesPanel() {
                 <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${decisionClass[policy.decision]}`}>
                   {policy.decision}
                 </span>
-                <span className={`text-xs font-semibold ${riskClass[policy.risk] ?? "text-slate-300"}`}>
+                <span className={`text-xs font-semibold ${riskClass[policy.risk] ?? "text-secondary"}`}>
                   {policy.risk}
                 </span>
-                <span className="font-mono text-[11px] text-slate-500">{policy.actionType}</span>
+                <span className="font-mono text-[11px] text-subdued">{policy.actionType}</span>
               </div>
-              <p className="mt-2 text-xs leading-5 text-slate-500">{policy.feedback}</p>
+              <p className="mt-2 text-xs leading-5 text-subdued">{policy.feedback}</p>
             </button>
           ))}
         </div>
@@ -570,7 +570,7 @@ export function PoliciesPanel() {
         <select
           value={selectedProjectId}
           onChange={(e) => setSelectedProjectId(e.target.value)}
-          className="min-h-10 rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+          className="min-h-10 rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
         >
           <option value="">All projects</option>
           {projects.map((p) => (
@@ -580,7 +580,7 @@ export function PoliciesPanel() {
         <button
           type="button"
           onClick={() => openCreate()}
-          className="inline-flex items-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-3 py-2 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200"
+          className="inline-flex items-center gap-2 rounded-md border border-brand-outline bg-brand px-3 py-2 text-sm font-semibold text-brand-ink transition hover:bg-brand-hover"
         >
           <Plus className="size-4" />
           Add custom policy
@@ -590,104 +590,104 @@ export function PoliciesPanel() {
       {showForm && (
         <section className={cardClass()}>
           <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm font-semibold text-white">{editingId ? "Edit policy" : "New policy"}</p>
+            <p className="text-sm font-semibold text-foreground">{editingId ? "Edit policy" : "New policy"}</p>
             <button type="button" onClick={() => setShowForm(false)}>
-              <X className="size-4 text-slate-400" />
+              <X className="size-4 text-muted" />
             </button>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Name *</label>
+              <label className="block text-xs font-medium text-muted mb-1">Name *</label>
               <input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Block .env access"
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Action type (empty = any)</label>
+              <label className="block text-xs font-medium text-muted mb-1">Action type (empty = any)</label>
               <select
                 value={form.actionType}
                 onChange={(e) => setForm((f) => ({ ...f, actionType: e.target.value }))}
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               >
                 {ACTION_TYPES.map((t) => <option key={t} value={t}>{t || "Any"}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Target pattern (supports *)</label>
+              <label className="block text-xs font-medium text-muted mb-1">Target pattern (supports *)</label>
               <input
                 value={form.targetPattern}
                 onChange={(e) => setForm((f) => ({ ...f, targetPattern: e.target.value }))}
                 placeholder="*.env* or /etc/passwd"
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Command pattern (supports *)</label>
+              <label className="block text-xs font-medium text-muted mb-1">Command pattern (supports *)</label>
               <input
                 value={form.commandPattern}
                 onChange={(e) => setForm((f) => ({ ...f, commandPattern: e.target.value }))}
                 placeholder="rm -rf* or npm install*"
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Decision *</label>
+              <label className="block text-xs font-medium text-muted mb-1">Decision *</label>
               <select
                 value={form.decision}
                 onChange={(e) => setForm((f) => ({ ...f, decision: e.target.value }))}
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               >
                 {DECISION_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Risk *</label>
+              <label className="block text-xs font-medium text-muted mb-1">Risk *</label>
               <select
                 value={form.risk}
                 onChange={(e) => setForm((f) => ({ ...f, risk: e.target.value }))}
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               >
                 {RISK_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Priority (lower = matched first)</label>
+              <label className="block text-xs font-medium text-muted mb-1">Priority (lower = matched first)</label>
               <input
                 type="number"
                 value={form.priority}
                 onChange={(e) => setForm((f) => ({ ...f, priority: parseInt(e.target.value) || 100 }))}
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Tool (empty = any)</label>
+              <label className="block text-xs font-medium text-muted mb-1">Tool (empty = any)</label>
               <input
                 value={form.tool}
                 onChange={(e) => setForm((f) => ({ ...f, tool: e.target.value }))}
                 placeholder="filesystem"
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-medium text-slate-400 mb-1">Feedback (shown to agent)</label>
+              <label className="block text-xs font-medium text-muted mb-1">Feedback (shown to agent)</label>
               <input
                 value={form.feedback}
                 onChange={(e) => setForm((f) => ({ ...f, feedback: e.target.value }))}
                 placeholder="Explain why this action is blocked or gated."
-                className="min-h-10 w-full rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-10 w-full rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               />
             </div>
           </div>
-          {status && <p className="mt-3 text-sm text-slate-400">{status}</p>}
+          {status && <p className="mt-3 text-sm text-muted">{status}</p>}
           <div className="mt-4 flex gap-3">
             <button
               type="button"
               disabled={busy}
               onClick={savePolicy}
-              className="inline-flex items-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2 text-sm font-semibold text-[#031018] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-md border border-brand-outline bg-brand px-4 py-2 text-sm font-semibold text-brand-ink disabled:opacity-60"
             >
               <Save className="size-4" />
               {editingId ? "Save changes" : "Create policy"}
@@ -695,7 +695,7 @@ export function PoliciesPanel() {
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="rounded-md border border-white/[0.1] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-slate-100"
+              className="rounded-md border border-outline bg-white/[0.04] px-4 py-2 text-sm font-semibold text-foreground"
             >
               Cancel
             </button>
@@ -705,22 +705,22 @@ export function PoliciesPanel() {
 
       {policies.length === 0 ? (
         <div className={cardClass()}>
-          <p className="text-sm font-semibold text-white">No custom policies</p>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="text-sm font-semibold text-foreground">No custom policies</p>
+          <p className="mt-2 text-sm text-muted">
             Default AgentWing policies apply. Add custom policies to override or extend them for your workspace.
           </p>
-          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Default policy templates</p>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-subdued">Default policy templates</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {DEFAULT_POLICIES.map((ex) => (
               <button
                 key={ex.name}
                 type="button"
                 onClick={() => openCreate(ex)}
-                className="flex items-start gap-3 rounded-md border border-white/[0.08] bg-[#05070d] p-3 text-left transition hover:border-cyan-300/20"
+                className="flex items-start gap-3 rounded-md border border-divider bg-background p-3 text-left transition hover:border-brand-outline"
               >
-                <Plus className="mt-0.5 size-3.5 shrink-0 text-cyan-200" />
+                <Plus className="mt-0.5 size-3.5 shrink-0 text-brand" />
                 <div>
-                  <p className="text-xs font-semibold text-white">{ex.name}</p>
+                  <p className="text-xs font-semibold text-foreground">{ex.name}</p>
                   <span className={`mt-1 inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold ${decisionClass[ex.decision]}`}>
                     {ex.decision}
                   </span>
@@ -734,38 +734,38 @@ export function PoliciesPanel() {
           {policies.map((policy) => (
             <article
               key={policy.policyId}
-              className={`rounded-md border bg-[#080b12] p-4 ${policy.enabled ? "border-white/[0.08]" : "border-white/[0.04] opacity-60"}`}
+              className={`rounded-md border bg-surface p-4 ${policy.enabled ? "border-divider" : "border-divider/70 opacity-60"}`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-white">{policy.name}</p>
+                    <p className="text-sm font-semibold text-foreground">{policy.name}</p>
                     <span className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${decisionClass[policy.decision] ?? ""}`}>
                       {policy.decision}
                     </span>
-                    <span className={`text-xs font-semibold ${riskClass[policy.risk] ?? "text-slate-300"}`}>
+                    <span className={`text-xs font-semibold ${riskClass[policy.risk] ?? "text-secondary"}`}>
                       {policy.risk}
                     </span>
-                    <span className="text-xs text-slate-500">priority: {policy.priority}</span>
+                    <span className="text-xs text-subdued">priority: {policy.priority}</span>
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-subdued">
                     {policy.actionType && <span>type: {policy.actionType}</span>}
                     {policy.targetPattern && <span>target: {policy.targetPattern}</span>}
                     {policy.commandPattern && <span>command: {policy.commandPattern}</span>}
                     {policy.tool && <span>tool: {policy.tool}</span>}
                   </div>
                   {policy.feedback && (
-                    <p className="mt-1 text-xs text-slate-400">{policy.feedback}</p>
+                    <p className="mt-1 text-xs text-muted">{policy.feedback}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => toggleEnabled(policy)} title={policy.enabled ? "Disable" : "Enable"}>
-                    {policy.enabled ? <ToggleRight className="size-5 text-cyan-200" /> : <ToggleLeft className="size-5 text-slate-500" />}
+                    {policy.enabled ? <ToggleRight className="size-5 text-brand" /> : <ToggleLeft className="size-5 text-subdued" />}
                   </button>
                   <button
                     type="button"
                     onClick={() => openEdit(policy)}
-                    className="rounded border border-white/[0.08] px-2 py-1 text-xs text-slate-300 transition hover:border-white/20"
+                    className="rounded border border-divider px-2 py-1 text-xs text-secondary transition hover:border-outline"
                   >
                     Edit
                   </button>
@@ -885,47 +885,47 @@ export function SandboxesPanel() {
 
       <div className="grid gap-3 md:grid-cols-3">
         <article className={cardClass()}>
-          <p className="text-xs font-medium text-slate-400">Connected sandbox providers</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{loading ? "—" : connected ? 1 : 0}</p>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="text-xs font-medium text-muted">Connected sandbox providers</p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{loading ? "—" : connected ? 1 : 0}</p>
+          <p className="mt-2 text-xs text-subdued">
             {connected ? "sandbox_required actions can route to E2B." : "sandbox_required actions must not execute locally."}
           </p>
         </article>
         <article className={cardClass()}>
-          <p className="text-xs font-medium text-slate-400">Provider</p>
-          <p className="mt-3 text-sm font-semibold text-white">E2B BYOK</p>
-          <p className="mt-2 text-xs text-slate-500">Customer-owned E2B credentials stored server-side.</p>
+          <p className="text-xs font-medium text-muted">Provider</p>
+          <p className="mt-3 text-sm font-semibold text-foreground">E2B BYOK</p>
+          <p className="mt-2 text-xs text-subdued">Customer-owned E2B credentials stored server-side.</p>
         </article>
         <article className={cardClass()}>
-          <p className="text-xs font-medium text-slate-400">Coming soon</p>
-          <p className="mt-3 text-sm font-semibold text-white">Daytona, Cloudflare Sandbox, Custom HTTP</p>
-          <p className="mt-2 text-xs text-slate-500">Additional providers follow the same safe key model.</p>
+          <p className="text-xs font-medium text-muted">Coming soon</p>
+          <p className="mt-3 text-sm font-semibold text-foreground">Daytona, Cloudflare Sandbox, Custom HTTP</p>
+          <p className="mt-2 text-xs text-subdued">Additional providers follow the same safe key model.</p>
         </article>
       </div>
 
       <section className={cardClass()}>
-        <p className="text-sm font-semibold text-white">Sandbox fallback behavior</p>
+        <p className="text-sm font-semibold text-foreground">Sandbox fallback behavior</p>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded border border-white/[0.06] bg-[#05070d] p-3">
-            <p className="text-xs font-semibold text-cyan-100">BYOK E2B connected</p>
-            <p className="mt-1 text-xs leading-5 text-slate-400">sandbox_required actions can be routed to the connected E2B sandbox.</p>
+          <div className="rounded border border-divider/70 bg-background p-3">
+            <p className="text-xs font-semibold text-brand-text">BYOK E2B connected</p>
+            <p className="mt-1 text-xs leading-5 text-muted">sandbox_required actions can be routed to the connected E2B sandbox.</p>
           </div>
-          <div className="rounded border border-white/[0.06] bg-[#05070d] p-3">
-            <p className="text-xs font-semibold text-cyan-100">Agent-owned sandbox</p>
-            <p className="mt-1 text-xs leading-5 text-slate-400">Use the AgentWing decision to route action to your existing sandbox.</p>
+          <div className="rounded border border-divider/70 bg-background p-3">
+            <p className="text-xs font-semibold text-brand-text">Agent-owned sandbox</p>
+            <p className="mt-1 text-xs leading-5 text-muted">Use the AgentWing decision to route action to your existing sandbox.</p>
           </div>
-          <div className="rounded border border-white/[0.06] bg-[#05070d] p-3">
-            <p className="text-xs font-semibold text-cyan-100">No sandbox connected</p>
-            <p className="mt-1 text-xs leading-5 text-slate-400">Do not execute sandbox_required actions locally. Connect E2B BYOK or use your own sandbox.</p>
+          <div className="rounded border border-divider/70 bg-background p-3">
+            <p className="text-xs font-semibold text-brand-text">No sandbox connected</p>
+            <p className="mt-1 text-xs leading-5 text-muted">Do not execute sandbox_required actions locally. Connect E2B BYOK or use your own sandbox.</p>
           </div>
         </div>
       </section>
 
       <section className={cardClass()}>
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.08] pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-divider pb-5">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">E2B BYOK Sandbox</p>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+            <p className="text-sm font-semibold text-foreground">E2B BYOK Sandbox</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
               Connect your own E2B API key. AgentWing uses this key server-side to run sandbox-required agent actions.
               Your key is never shown again after saving.
             </p>
@@ -949,23 +949,23 @@ export function SandboxesPanel() {
             <ProviderDetail label="Runtime execution" value={config.runtimeExecutionEnabled ? "Enabled" : "Disabled"} />
             <ProviderDetail label="Created" value={formatDate(config.createdAt)} />
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Last tested</p>
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-subdued">Last tested</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className={statusPillClass(lastTestKind)}>
                   {config.lastTestStatus === "success" ? "Success" : config.lastTestStatus === "failed" ? "Failed" : "Not tested"}
                 </span>
-                {config.lastTestedAt && <span className="text-xs text-slate-500">{formatDate(config.lastTestedAt)}</span>}
+                {config.lastTestedAt && <span className="text-xs text-subdued">{formatDate(config.lastTestedAt)}</span>}
               </div>
             </div>
           </div>
         )}
 
         {showSetup && !secretMissing && (
-          <div className={connected ? "mt-5 border-t border-white/[0.08] pt-5" : "mt-5"}>
-            <label htmlFor="e2b-key" className="text-sm font-semibold text-white">
+          <div className={connected ? "mt-5 border-t border-divider pt-5" : "mt-5"}>
+            <label htmlFor="e2b-key" className="text-sm font-semibold text-foreground">
               {isReplacing ? "Replace E2B API key" : "E2B API key"}
             </label>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-muted">
               Paste your E2B API key. It is stored encrypted server-side and never returned to the browser.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -975,13 +975,13 @@ export function SandboxesPanel() {
                 value={e2bInput}
                 onChange={(e) => setE2bInput(e.target.value)}
                 placeholder="e2b_..."
-                className="min-h-11 flex-1 rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+                className="min-h-11 flex-1 rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
               />
               <button
                 type="button"
                 disabled={busy}
                 onClick={saveKey}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2 text-sm font-semibold text-[#031018] disabled:opacity-60"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-brand-outline bg-brand px-4 py-2 text-sm font-semibold text-brand-ink disabled:opacity-60"
               >
                 <Save className="size-4" />
                 Save key
@@ -990,7 +990,7 @@ export function SandboxesPanel() {
                 type="button"
                 disabled={busy}
                 onClick={testKey}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-slate-100 disabled:opacity-60"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-outline bg-white/[0.04] px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
               >
                 <Play className="size-4" />
                 Test
@@ -1000,12 +1000,12 @@ export function SandboxesPanel() {
         )}
 
         {connected && !showSetup && (
-          <div className="mt-5 flex flex-wrap gap-3 border-t border-white/[0.08] pt-5">
+          <div className="mt-5 flex flex-wrap gap-3 border-t border-divider pt-5">
             <button
               type="button"
               disabled={busy}
               onClick={testKey}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-slate-100 disabled:opacity-60"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-outline bg-white/[0.04] px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
             >
               <Play className="size-4" />
               Test connection
@@ -1014,7 +1014,7 @@ export function SandboxesPanel() {
               type="button"
               disabled={busy}
               onClick={() => setIsReplacing(true)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-300/[0.08] px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-60"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-brand-outline bg-brand-surface px-4 py-2 text-sm font-semibold text-brand-text disabled:opacity-60"
             >
               <RefreshCw className="size-4" />
               Replace key
@@ -1032,8 +1032,8 @@ export function SandboxesPanel() {
         )}
 
         {status && (
-          <div className="mt-4 flex items-start gap-2 rounded-md border border-white/[0.08] bg-[#05070d] px-3 py-2 text-sm text-slate-300">
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-cyan-200" />
+          <div className="mt-4 flex items-start gap-2 rounded-md border border-divider bg-background px-3 py-2 text-sm text-secondary">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-brand" />
             <p>{busy ? "Working..." : status}</p>
           </div>
         )}
@@ -1044,9 +1044,9 @@ export function SandboxesPanel() {
 
 function ProviderDetail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="min-w-0 border-b border-white/[0.06] pb-3">
-      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
-      <p className={mono ? "mt-2 break-all font-mono text-sm text-cyan-100" : "mt-2 text-sm font-semibold text-white"}>
+    <div className="min-w-0 border-b border-divider/70 pb-3">
+      <p className="text-xs font-medium uppercase tracking-[0.12em] text-subdued">{label}</p>
+      <p className={mono ? "mt-2 break-all font-mono text-sm text-brand-text" : "mt-2 text-sm font-semibold text-foreground"}>
         {value}
       </p>
     </div>
@@ -1121,31 +1121,31 @@ export function ProjectsPanel() {
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && createNewProject()}
             placeholder="my-production-agent"
-            className="min-h-11 flex-1 rounded-md border border-white/[0.1] bg-[#05070d] px-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
+            className="min-h-11 flex-1 rounded-md border border-outline bg-background px-3 text-sm text-foreground outline-none focus:border-brand/65"
           />
           <button
             type="button"
             onClick={createNewProject}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-300 px-4 py-2 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-brand-outline bg-brand px-4 py-2 text-sm font-semibold text-brand-ink transition hover:bg-brand-hover"
           >
             <Plus className="size-4" />
             Create project
           </button>
         </div>
-        {status && <p className="mt-3 text-sm text-slate-400">{status}</p>}
+        {status && <p className="mt-3 text-sm text-muted">{status}</p>}
       </section>
       {projects.length === 0 ? (
-        <div className="rounded-md border border-white/[0.08] bg-[#080b12] px-5 py-8 text-center">
-          <p className="text-sm font-semibold text-white">No projects yet</p>
-          <p className="mt-2 text-sm text-slate-400">Create your first project to generate API keys and track usage.</p>
+        <div className="rounded-md border border-divider bg-surface px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-foreground">No projects yet</p>
+          <p className="mt-2 text-sm text-muted">Create your first project to generate API keys and track usage.</p>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {projects.map((project) => (
             <article key={project.projectId} className={cardClass()}>
-              <p className="text-sm font-semibold text-white">{project.name}</p>
-              <p className="mt-2 font-mono text-xs text-cyan-100">{maskedProjectId(project.projectId)}</p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="text-sm font-semibold text-foreground">{project.name}</p>
+              <p className="mt-2 font-mono text-xs text-brand-text">{maskedProjectId(project.projectId)}</p>
+              <p className="mt-2 text-xs text-muted">
                 Created {new Date(project.createdAt).toLocaleString()}
               </p>
             </article>
@@ -1168,12 +1168,12 @@ export function UsagePanel({ stats, usage = defaultUsage }: { stats: ReceiptStat
       <StatsGrid stats={stats} />
       {(usage.actionChecksUsed > 0 || usage.sandboxRunsUsed > 0 || usage.receiptsCreated > 0) ? (
         <section className={cardClass()}>
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.08] pb-4">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-divider pb-4">
             <div>
-              <p className="text-sm font-semibold text-white">{usage.planName} plan</p>
-              <p className="mt-1 text-xs text-slate-400">Workspace-level aggregate</p>
+              <p className="text-sm font-semibold text-foreground">{usage.planName} plan</p>
+              <p className="mt-1 text-xs text-muted">Workspace-level aggregate</p>
             </div>
-            <span className="rounded border border-cyan-300/20 bg-cyan-300/[0.08] px-2 py-1 text-xs font-semibold text-cyan-100">
+            <span className="rounded border border-brand-outline bg-brand-surface px-2 py-1 text-xs font-semibold text-brand-text">
               Beta
             </span>
           </div>
@@ -1190,18 +1190,18 @@ export function UsagePanel({ stats, usage = defaultUsage }: { stats: ReceiptStat
               limit={usage.sandboxRunLimit}
               percent={sandboxPercent}
             />
-            <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-4">
-              <p className="text-xs font-medium text-slate-400">Receipts created</p>
-              <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{usage.receiptsCreated}</p>
-              <p className="mt-2 text-xs text-slate-500">Audit receipts from all checks.</p>
+            <div className="rounded-md border border-divider bg-background p-4">
+              <p className="text-xs font-medium text-muted">Receipts created</p>
+              <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{usage.receiptsCreated}</p>
+              <p className="mt-2 text-xs text-subdued">Audit receipts from all checks.</p>
             </div>
           </div>
         </section>
       ) : (
-        <div className="rounded-md border border-white/[0.08] bg-[#080b12] px-5 py-8 text-center">
-          <p className="text-sm font-semibold text-white">No usage yet</p>
-          <p className="mt-2 text-sm text-slate-400">
-            Generate an API key and call <code className="font-mono text-cyan-100">/api/v1/check-action</code> to start tracking usage.
+        <div className="rounded-md border border-divider bg-surface px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-foreground">No usage yet</p>
+          <p className="mt-2 text-sm text-muted">
+            Generate an API key and call <code className="font-mono text-brand-text">/api/v1/check-action</code> to start tracking usage.
           </p>
         </div>
       )}
@@ -1211,15 +1211,15 @@ export function UsagePanel({ stats, usage = defaultUsage }: { stats: ReceiptStat
 
 function UsageMeter({ label, value, limit, percent }: { label: string; value: number; limit: number; percent: number }) {
   return (
-    <div className="rounded-md border border-white/[0.08] bg-[#05070d] p-4">
+    <div className="rounded-md border border-divider bg-background p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-slate-400">{label}</p>
-        <p className="font-mono text-xs text-slate-400">{value} / {limit}</p>
+        <p className="text-xs font-medium text-muted">{label}</p>
+        <p className="font-mono text-xs text-muted">{value} / {limit}</p>
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-        <div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${percent}%` }} />
       </div>
-      <p className="mt-2 text-xs text-slate-500">{percent}% used</p>
+      <p className="mt-2 text-xs text-subdued">{percent}% used</p>
     </div>
   );
 }
@@ -1240,10 +1240,10 @@ export function StatsGrid({ stats }: { stats: ReceiptStats }) {
       {items.map(([label, value, Icon]) => (
         <article key={label} className={cardClass()}>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-medium text-slate-400">{label}</p>
-            <Icon className="size-4 text-cyan-200" />
+            <p className="text-xs font-medium text-muted">{label}</p>
+            <Icon className="size-4 text-brand" />
           </div>
-          <p className="mt-4 text-3xl font-semibold tracking-tight text-white">{value}</p>
+          <p className="mt-4 text-3xl font-semibold tracking-tight text-foreground">{value}</p>
         </article>
       ))}
     </div>
@@ -1256,8 +1256,8 @@ export function ReceiptsTable({ receipts }: { receipts: ActionReceipt[] }) {
   const rows = useMemo(() => receipts.slice(0, 20), [receipts]);
 
   return (
-    <section className="overflow-hidden rounded-md border border-white/[0.08] bg-[#080b12]">
-      <div className="grid grid-cols-[0.9fr_0.7fr_0.8fr_1.4fr_1fr] border-b border-white/[0.08] bg-[#0c1019] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+    <section className="overflow-hidden rounded-md border border-divider bg-surface">
+      <div className="grid grid-cols-[0.9fr_0.7fr_0.8fr_1.4fr_1fr] border-b border-divider bg-raised px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
         <span>Decision</span>
         <span>Risk</span>
         <span>Type</span>
@@ -1265,21 +1265,21 @@ export function ReceiptsTable({ receipts }: { receipts: ActionReceipt[] }) {
         <span>Time</span>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-slate-400">No receipts yet. Call POST /api/v1/check-action or /api/v1/execute-action with your API key.</p>
+        <p className="px-4 py-8 text-sm text-muted">No receipts yet. Call POST /api/v1/check-action or /api/v1/execute-action with your API key.</p>
       ) : (
         rows.map((receipt) => (
           <Link
             key={receipt.receiptId}
             href={`/dashboard/receipts/${receipt.receiptId}`}
-            className="grid grid-cols-[0.9fr_0.7fr_0.8fr_1.4fr_1fr] gap-3 border-b border-white/[0.06] px-4 py-3 text-sm last:border-b-0 transition hover:bg-white/[0.02]"
+            className="grid grid-cols-[0.9fr_0.7fr_0.8fr_1.4fr_1fr] gap-3 border-b border-divider/70 px-4 py-3 text-sm last:border-b-0 transition hover:bg-white/[0.02]"
           >
             <span className={`w-fit rounded border px-2 py-1 text-[11px] font-semibold ${decisionClass[receipt.decision] ?? ""}`}>
               {receipt.decision}
             </span>
-            <span className={`text-xs font-semibold ${riskClass[receipt.risk] ?? "text-slate-300"}`}>{receipt.risk}</span>
-            <span className="font-mono text-xs text-cyan-100">{receipt.actionType}</span>
-            <span className="min-w-0 truncate text-xs text-slate-300">{receipt.feedback}</span>
-            <span className="text-xs text-slate-500">{new Date(receipt.createdAt).toLocaleString()}</span>
+            <span className={`text-xs font-semibold ${riskClass[receipt.risk] ?? "text-secondary"}`}>{receipt.risk}</span>
+            <span className="font-mono text-xs text-brand-text">{receipt.actionType}</span>
+            <span className="min-w-0 truncate text-xs text-secondary">{receipt.feedback}</span>
+            <span className="text-xs text-subdued">{new Date(receipt.createdAt).toLocaleString()}</span>
           </Link>
         ))
       )}
@@ -1292,9 +1292,9 @@ export function ReceiptsTable({ receipts }: { receipts: ActionReceipt[] }) {
 export function PageHeading({ title, copy }: { title: string; copy: string }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200">AgentWing</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">{title}</h1>
-      <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">{copy}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">AgentWing</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
+      <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">{copy}</p>
     </div>
   );
 }

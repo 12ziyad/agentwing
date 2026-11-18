@@ -47,10 +47,10 @@ export function RunApprovalControls({
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-200" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-amber-100">Human approval required</p>
-          {summary && <p className="mt-1 break-words text-sm font-medium text-white">{summary}</p>}
+          {summary && <p className="mt-1 break-words text-sm font-medium text-foreground">{summary}</p>}
         </div>
       </div>
-      <p className="mt-1 text-xs leading-5 text-slate-400">
+      <p className="mt-1 text-xs leading-5 text-muted">
         This run is paused. Approving continues the guarded path inside this run; rejecting seals it without execution.
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -85,9 +85,9 @@ export function RunApprovalControls({
 
 function ApprovalField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="min-w-0 rounded border border-white/[0.06] bg-[#05070d] p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-      <p className={mono ? "mt-1 break-all font-mono text-xs text-cyan-100" : "mt-1 text-sm font-semibold text-white"}>
+    <div className="min-w-0 rounded border border-divider/70 bg-background p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-subdued">{label}</p>
+      <p className={mono ? "mt-1 break-all font-mono text-xs text-brand-text" : "mt-1 text-sm font-semibold text-foreground"}>
         {value}
       </p>
     </div>

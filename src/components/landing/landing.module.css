@@ -1,11 +1,11 @@
 .page {
-  --ink: #151710;
-  --dark: #12140f;
+  --ink: var(--color-brand-ink);
+  --dark: var(--color-background);
   --paper: #f2f3e9;
-  --white: #f5f6ed;
-  --accent: #dafa76;
-  --muted: #aeb3a4;
-  --line: #30352a;
+  --white: var(--color-foreground);
+  --accent: var(--color-brand);
+  --muted: var(--color-muted);
+  --line: var(--color-divider);
   --gutter: clamp(20px, 5vw, 72px);
   --landing-mono: var(--font-jetbrains-mono), monospace;
   min-height: 100vh;
@@ -125,9 +125,9 @@
   color: var(--ink);
 }
 
-.primaryButton:hover { background: #ecffa9; }
+.primaryButton:hover { background: var(--color-brand-hover); }
 
-.outlineButton { border-color: #42483a; }
+.outlineButton { border-color: var(--color-outline); }
 .outlineButton:hover { border-color: #868e7a; background: #23271e; }
 
 .heroVisual {
@@ -235,7 +235,7 @@
   gap: 9px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
-  background: #1d2118;
+  background: var(--color-raised);
   font-size: 13px;
   font-weight: 600;
 }
@@ -254,7 +254,7 @@
   gap: 4px;
   padding: 13px 10px;
   border-right: 1px solid var(--line);
-  background: #181c14;
+  background: var(--color-surface);
 }
 
 .demoOptions button {

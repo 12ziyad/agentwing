@@ -2,14 +2,14 @@ import { PublicNav, PublicFooter } from "@/components/PublicLayout";
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-[#05070d] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <PublicNav />
       <main className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Legal</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">Terms of Service</h1>
-        <p className="mt-2 text-xs text-slate-500">Last updated: 2026 · GPMai Labs</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">Legal</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">Terms of Service</h1>
+        <p className="mt-2 text-xs text-subdued">Last updated: 2026 · GPMai Labs</p>
 
-        <div className="mt-10 space-y-8 text-sm leading-7 text-slate-300">
+        <div className="mt-10 space-y-8 text-sm leading-7 text-secondary">
           <Section title="1. Acceptance">
             <p>By using AgentWing you agree to these Terms. If you do not agree, do not use the service.</p>
           </Section>
@@ -28,14 +28,14 @@ export default function TermsPage() {
 
           <Section title="5. Acceptable use">
             <p>You may not use AgentWing to:</p>
-            <ul className="mt-2 space-y-1 text-slate-400">
+            <ul className="mt-2 space-y-1 text-muted">
               {[
                 "Abuse, spam, or generate excessive API calls beyond fair use",
                 "Resell or proxy AgentWing services without a written agreement",
                 "Attempt to bypass rate limits, workspace isolation, or access other users&apos; data",
                 "Use the service for illegal activity or to violate third-party rights",
               ].map((item) => (
-                <li key={item} className="flex items-start gap-2"><span className="shrink-0 text-slate-500">•</span><span dangerouslySetInnerHTML={{ __html: item }} /></li>
+                <li key={item} className="flex items-start gap-2"><span className="shrink-0 text-subdued">•</span><span dangerouslySetInnerHTML={{ __html: item }} /></li>
               ))}
             </ul>
           </Section>
@@ -49,7 +49,7 @@ export default function TermsPage() {
           </Section>
 
           <Section title="8. Customer data">
-            <p>You retain ownership of your data. We process it as described in our <a href="/privacy" className="text-cyan-200 underline">Privacy Policy</a>. You may request deletion at any time.</p>
+            <p>You retain ownership of your data. We process it as described in our <a href="/privacy" className="text-brand underline">Privacy Policy</a>. You may request deletion at any time.</p>
           </Section>
 
           <Section title="9. Telemetry">
@@ -73,7 +73,7 @@ export default function TermsPage() {
           </Section>
 
           <Section title="14. Contact">
-            <p>Questions about these Terms: <a href="mailto:founder@gpmai.dev" className="text-cyan-200 underline">founder@gpmai.dev</a></p>
+            <p>Questions about these Terms: <a href="mailto:founder@gpmai.dev" className="text-brand underline">founder@gpmai.dev</a></p>
           </Section>
         </div>
       </main>
@@ -85,7 +85,7 @@ export default function TermsPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="text-base font-semibold text-white">{title}</h2>
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
       <div className="mt-2">{children}</div>
     </div>
   );

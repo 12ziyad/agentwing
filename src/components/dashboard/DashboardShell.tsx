@@ -10,12 +10,14 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  Menu,
   PlugZap,
   ReceiptText,
   Route,
   Settings,
   ShieldCheck,
 } from "lucide-react";
+import { AgentWingBrand } from "@/components/AgentWingBrand";
 import type { DashboardAuthContext } from "@/lib/agentwingTypes";
 
 const navItems = [
@@ -31,100 +33,115 @@ const navItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-export function DashboardShell({ children, auth }: { children: React.ReactNode; auth: DashboardAuthContext }) {
+function DashboardNav({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
+
+  return (
+    <nav aria-label="Dashboard" className="space-y-1 p-2">
+      {navItems.map(({ href, label, icon: Icon }) => {
+        const current = pathname === href;
+        const active = current || (href !== "/dashboard" && pathname.startsWith(href + "/"));
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={current ? "page" : active ? "location" : undefined}
+            onClick={mobile ? (event) => event.currentTarget.closest("details")?.removeAttribute("open") : undefined}
+            className={`flex min-h-10 items-center gap-2.5 rounded-md border px-3 py-2 text-sm font-medium transition ${
+              active
+                ? "border-brand-outline bg-brand-surface text-brand"
+                : "border-transparent text-muted hover:bg-raised hover:text-foreground"
+            }`}
+          >
+            <Icon className="size-4 shrink-0" aria-hidden />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function DashboardShell({ children, auth }: { children: React.ReactNode; auth: DashboardAuthContext }) {
   const user = auth.user;
   const workspace = auth.workspace;
   const maskedUser = user?.email ? "Signed in" : "Admin";
 
   return (
-    <main className="min-h-screen bg-[#05070d] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
-        <aside className="hidden w-60 shrink-0 border-r border-white/[0.08] bg-[#080b12] lg:block">
-          <div className="border-b border-white/[0.08] px-5 py-5">
-            <Link href="/" className="flex items-center gap-2 text-lg font-semibold text-white">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/agentwing-icon.png" alt="" className="size-8 rounded" />
-              <span>AgentWing</span>
-            </Link>
-            <p className="mt-1 text-[11px] text-slate-500">Execution control center</p>
+        <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 overflow-y-auto border-r border-divider bg-surface lg:block">
+          <div className="border-b border-divider px-5 py-5">
+            <AgentWingBrand />
             {workspace && (
-              <div className="mt-3 rounded border border-white/[0.08] bg-[#05070d] px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Workspace</p>
-                <p className="mt-0.5 truncate text-xs font-medium text-slate-200">{workspace.name}</p>
-                {/* Shown because what you can do here depends on it, and a
-                    permission error is far less confusing when you already
-                    knew your role. */}
-                <p className="mt-1.5 font-mono text-[10px] text-slate-500">role: {auth.role}</p>
+              <div className="mt-4 rounded-md border border-divider bg-background px-3 py-2">
+                <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-subdued">Workspace</p>
+                <p className="mt-1 truncate text-sm font-medium">{workspace.name}</p>
+                <p className="mt-1 text-xs capitalize text-muted">{auth.role}</p>
               </div>
             )}
           </div>
-          <nav className="space-y-0.5 px-3 py-3">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-2.5 rounded px-3 py-2 text-sm font-medium transition ${
-                    active
-                      ? "border border-cyan-300/20 bg-cyan-300/[0.08] text-cyan-100"
-                      : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
-                  }`}
-                >
-                  <Icon className="size-4 shrink-0" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="px-2 py-3"><DashboardNav /></div>
         </aside>
-        <section className="min-w-0 flex-1">
-          <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#05070d]/92 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-white">AgentWing Console</p>
-                <p className="text-[11px] text-slate-500">
+        <div className="min-w-0 flex-1">
+          <header className="sticky top-0 z-20 border-b border-divider bg-background/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="lg:hidden"><AgentWingBrand /></div>
+                <p className="hidden text-sm font-semibold lg:block">AgentWing Console</p>
+                <p className="hidden truncate text-xs text-subdued lg:block">
                   {workspace ? workspace.name : "Admin mode"}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="hidden items-center gap-2 rounded border border-white/[0.08] bg-white/[0.04] px-2 py-1.5 sm:flex">
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                <div className="hidden items-center gap-2 rounded-md border border-divider bg-surface px-2 py-1.5 sm:flex">
                   {user?.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={user.image} alt="" className="size-6 rounded-full" referrerPolicy="no-referrer" />
                   ) : (
-                  <span className="flex size-6 items-center justify-center rounded-full bg-cyan-300 text-xs font-semibold text-[#031018]">
+                    <span className="flex size-6 items-center justify-center rounded-full bg-brand text-xs font-semibold text-brand-ink">
                       {workspace?.name?.[0]?.toUpperCase() ?? "A"}
                     </span>
                   )}
-                  <span className="max-w-36 truncate text-xs font-medium text-slate-300">
+                  <span className="max-w-36 truncate text-xs font-medium text-secondary">
                     {maskedUser}
                   </span>
                 </div>
                 <Link
                   href="/docs"
-                  className="inline-flex items-center gap-1.5 rounded border border-white/[0.1] bg-white/[0.04] px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white"
+                  aria-label="Docs"
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-outline bg-surface px-2.5 text-xs font-medium text-secondary transition hover:text-foreground"
                 >
-                  <BookOpen className="size-3.5" />
-                  Docs
+                  <BookOpen className="size-3.5" aria-hidden />
+                  <span className="hidden sm:inline">Docs</span>
                 </Link>
                 <form action="/api/auth/signout" method="post">
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-1.5 rounded border border-white/[0.1] bg-white/[0.04] px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white"
+                    aria-label="Sign out"
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-outline bg-surface px-2.5 text-xs font-medium text-secondary transition hover:text-foreground"
                   >
-                    <LogOut className="size-3.5" />
-                    Sign out
+                    <LogOut className="size-3.5" aria-hidden />
+                    <span className="hidden sm:inline">Sign out</span>
                   </button>
                 </form>
+                <details className="relative lg:hidden">
+                  <summary
+                    aria-label="Dashboard menu"
+                    className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md border border-outline bg-surface text-foreground [&::-webkit-details-marker]:hidden"
+                  >
+                    <Menu size={18} aria-hidden />
+                  </summary>
+                  <div className="absolute top-12 right-0 max-h-[calc(100dvh-5rem)] w-52 overflow-y-auto rounded-lg border border-outline bg-surface shadow-2xl shadow-black/50">
+                    <DashboardNav mobile />
+                  </div>
+                </details>
               </div>
             </div>
           </header>
-          <div className="px-4 py-6 sm:px-6 lg:px-8">{children}</div>
-        </section>
+          <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }

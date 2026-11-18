@@ -44,9 +44,9 @@ export default async function SettingsPage() {
   return (
     <div className="max-w-4xl space-y-8">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Settings</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Account and workspace settings</h1>
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Settings</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Account and workspace settings</h1>
+        <p className="mt-2 text-sm text-muted">
           Your account, security posture, data controls, support links, and safe deletion request flow.
         </p>
       </div>
@@ -55,7 +55,7 @@ export default async function SettingsPage() {
         <div className="space-y-3 text-sm">
           {user?.image && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.image} alt="" referrerPolicy="no-referrer" className="size-14 rounded-full border border-white/[0.1]" />
+            <img src={user.image} alt="" referrerPolicy="no-referrer" className="size-14 rounded-full border border-outline" />
           )}
           <Row label="Name" value={user?.name ?? NOT_AVAILABLE} />
           <Row label="Email" value={maskedEmail(user?.email)} />
@@ -68,12 +68,12 @@ export default async function SettingsPage() {
         </div>
         <div className="mt-5">
           <form action="/api/auth/signout" method="post">
-            <button type="submit" className="rounded border border-white/[0.1] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:text-white">
+            <button type="submit" className="rounded border border-outline px-4 py-2 text-xs font-semibold text-secondary transition hover:text-foreground">
               Sign out
             </button>
           </form>
         </div>
-        <p className="mt-3 text-xs text-slate-500">AgentWing uses Google sign-in. No password is stored by AgentWing.</p>
+        <p className="mt-3 text-xs text-subdued">AgentWing uses Google sign-in. No password is stored by AgentWing.</p>
       </SettingsSection>
 
       <SettingsSection title="Workspace">
@@ -88,7 +88,7 @@ export default async function SettingsPage() {
       </SettingsSection>
 
       <SettingsSection title="Security">
-        <div className="space-y-2 text-sm text-slate-300">
+        <div className="space-y-2 text-sm text-secondary">
           <SecurityItem ok label="Google OAuth enabled" />
           <SecurityItem ok={false} label="Password login: not used" />
           <SecurityItem ok label="API keys: hashed at rest" />
@@ -106,17 +106,17 @@ export default async function SettingsPage() {
           <Row label="Last sandbox test" value={lastSandboxTest} />
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Link href="/dashboard/api-keys" className="rounded border border-white/[0.1] px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white">
+          <Link href="/dashboard/api-keys" className="rounded border border-outline px-3 py-1.5 text-xs font-medium text-secondary transition hover:text-foreground">
             Manage API keys
           </Link>
-          <Link href="/dashboard/sandboxes" className="rounded border border-white/[0.1] px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white">
+          <Link href="/dashboard/sandboxes" className="rounded border border-outline px-3 py-1.5 text-xs font-medium text-secondary transition hover:text-foreground">
             Manage sandboxes
           </Link>
         </div>
       </SettingsSection>
 
       <SettingsSection title="Data & Privacy">
-        <div className="grid gap-5 text-sm text-slate-300 md:grid-cols-2">
+        <div className="grid gap-5 text-sm text-secondary md:grid-cols-2">
           <DataList
             title="What AgentWing stores"
             items={[
@@ -141,10 +141,10 @@ export default async function SettingsPage() {
           />
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <a href="mailto:founder@gpmai.dev?subject=Data export request" className="rounded border border-white/[0.1] px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white">
+          <a href="mailto:founder@gpmai.dev?subject=Data export request" className="rounded border border-outline px-3 py-1.5 text-xs font-medium text-secondary transition hover:text-foreground">
             Request data export
           </a>
-          <a href="mailto:founder@gpmai.dev?subject=Account deletion question" className="rounded border border-white/[0.1] px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white">
+          <a href="mailto:founder@gpmai.dev?subject=Account deletion question" className="rounded border border-outline px-3 py-1.5 text-xs font-medium text-secondary transition hover:text-foreground">
             Ask about deletion
           </a>
         </div>
@@ -152,13 +152,13 @@ export default async function SettingsPage() {
 
       <SettingsSection title="Support">
         <div className="flex flex-wrap gap-3 text-sm">
-          <a href="mailto:founder@gpmai.dev" className="rounded border border-white/[0.1] px-3 py-2 text-slate-300 transition hover:text-white">
+          <a href="mailto:founder@gpmai.dev" className="rounded border border-outline px-3 py-2 text-secondary transition hover:text-foreground">
             Contact support
           </a>
-          <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="rounded border border-white/[0.1] px-3 py-2 text-slate-300 transition hover:text-white">
+          <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="rounded border border-outline px-3 py-2 text-secondary transition hover:text-foreground">
             GitHub
           </a>
-          <a href="https://www.reddit.com/user/Far_Pangolin_7657/" target="_blank" rel="noopener noreferrer" className="rounded border border-white/[0.1] px-3 py-2 text-slate-300 transition hover:text-white">
+          <a href="https://www.reddit.com/user/Far_Pangolin_7657/" target="_blank" rel="noopener noreferrer" className="rounded border border-outline px-3 py-2 text-secondary transition hover:text-foreground">
             Reddit
           </a>
         </div>
@@ -173,16 +173,16 @@ export default async function SettingsPage() {
             { href: "/support", label: "Support" },
             { href: "/contact", label: "Contact" },
           ].map(({ href, label }) => (
-            <Link key={href} href={href} className="rounded border border-white/[0.1] px-3 py-2 text-slate-300 transition hover:text-white">
+            <Link key={href} href={href} className="rounded border border-outline px-3 py-2 text-secondary transition hover:text-foreground">
               {label}
             </Link>
           ))}
         </div>
       </SettingsSection>
 
-      <section className="rounded-md border border-red-300/20 bg-[#080b12] p-6">
+      <section className="rounded-md border border-red-300/20 bg-surface p-6">
         <h2 className="text-base font-semibold text-red-200">Danger Zone</h2>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-subdued">
           Destructive and privacy-sensitive actions. AgentWing records account deletion requests for review instead of hard-deleting immediately.
         </p>
         <div className="mt-5">
@@ -195,8 +195,8 @@ export default async function SettingsPage() {
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-      <h2 className="text-base font-semibold text-white">{title}</h2>
+    <section className="rounded-md border border-divider bg-surface p-6">
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -206,8 +206,8 @@ function Row({ label, value, mono, copyable }: { label: string; value: string; m
   const displayValue = value || NOT_AVAILABLE;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="w-44 shrink-0 text-slate-500">{label}</span>
-      <span className={`break-all text-slate-200 ${mono ? "font-mono text-xs" : ""}`}>{displayValue}</span>
+      <span className="w-44 shrink-0 text-subdued">{label}</span>
+      <span className={`break-all text-secondary ${mono ? "font-mono text-xs" : ""}`}>{displayValue}</span>
       {copyable && displayValue !== NOT_AVAILABLE && <CopyButton value={displayValue} />}
     </div>
   );
@@ -217,7 +217,7 @@ function SecurityItem({ ok, label }: { ok: boolean; label: string }) {
   return (
     <div className="flex items-center gap-2">
       <span className={`size-2 shrink-0 rounded-full ${ok ? "bg-emerald-400" : "bg-slate-600"}`} />
-      <span className={ok ? "text-slate-300" : "text-slate-500"}>{label}</span>
+      <span className={ok ? "text-secondary" : "text-subdued"}>{label}</span>
     </div>
   );
 }
@@ -225,11 +225,11 @@ function SecurityItem({ ok, label }: { ok: boolean; label: string }) {
 function DataList({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
-      <p className="font-semibold text-white">{title}</p>
-      <ul className="mt-2 space-y-1 text-slate-400">
+      <p className="font-semibold text-foreground">{title}</p>
+      <ul className="mt-2 space-y-1 text-muted">
         {items.map((item) => (
           <li key={item} className="flex items-start gap-2">
-            <span className="mt-0.5 text-cyan-400">-</span>
+            <span className="mt-0.5 text-brand">-</span>
             <span>{item}</span>
           </li>
         ))}

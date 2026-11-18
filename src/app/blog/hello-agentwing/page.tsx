@@ -3,21 +3,21 @@ import { PublicNav, PublicFooter } from "@/components/PublicLayout";
 
 export default function HelloAgentWingPost() {
   return (
-    <div className="min-h-screen bg-[#05070d] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <PublicNav />
       <main className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
-        <Link href="/blog" className="text-xs text-slate-500 transition hover:text-slate-300">
+        <Link href="/blog" className="text-xs text-subdued transition hover:text-secondary">
           ← Blog
         </Link>
-        <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+        <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-subdued">
           launch · 2026 · 3 min read
         </p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">Hello AgentWing</h1>
-        <p className="mt-4 text-base font-medium text-slate-300">
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">Hello AgentWing</h1>
+        <p className="mt-4 text-base font-medium text-secondary">
           AI agents can run commands, edit files, call tools, and touch production. Most teams still lack a runtime control layer. Today that changes.
         </p>
 
-        <div className="mt-10 space-y-8 text-sm leading-7 text-slate-300">
+        <div className="mt-10 space-y-8 text-sm leading-7 text-secondary">
           <Section title="Agents can act now">
             <p>
               The era of AI agents that can actually do things is here. Claude Code can edit files, run shell commands, and commit code. Codex can scaffold entire projects. Custom agents built on any LLM can call APIs, read databases, and modify production state.
@@ -91,11 +91,11 @@ export default function HelloAgentWingPost() {
           </Section>
         </div>
 
-        <div className="mt-12 flex flex-wrap gap-3 border-t border-white/[0.08] pt-8">
-          <a href="/api/auth/signin/google" className="rounded-md bg-cyan-300 px-5 py-2.5 text-sm font-semibold text-[#031018] transition hover:bg-cyan-200">
+        <div className="mt-12 flex flex-wrap gap-3 border-t border-divider pt-8">
+          <a href="/api/auth/signin/google" className="rounded-md bg-brand px-5 py-2.5 text-sm font-semibold text-brand-ink transition hover:bg-brand-hover">
             Sign up free with Google
           </a>
-          <Link href="/docs" className="rounded-md border border-white/[0.1] px-5 py-2.5 text-sm font-semibold text-slate-300 transition hover:text-white">
+          <Link href="/docs" className="rounded-md border border-outline px-5 py-2.5 text-sm font-semibold text-secondary transition hover:text-foreground">
             Read the docs
           </Link>
         </div>
@@ -108,7 +108,7 @@ export default function HelloAgentWingPost() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="text-lg font-semibold text-white">{title}</h2>
+      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
       <div className="mt-3 space-y-3">{children}</div>
     </div>
   );

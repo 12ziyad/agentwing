@@ -33,11 +33,11 @@ const faq = [
 
 export default function SupportPage() {
   return (
-    <div className="min-h-screen bg-[#05070d] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <PublicNav />
       <main className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Support</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">Support</h1>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">Support</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">Support</h1>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           <ContactCard title="Email" href="mailto:founder@gpmai.dev" label="founder@gpmai.dev" desc="General support and billing" />
@@ -46,12 +46,12 @@ export default function SupportPage() {
         </div>
 
         <div className="mt-12">
-          <h2 className="text-xl font-semibold text-white">FAQ</h2>
+          <h2 className="text-xl font-semibold text-foreground">FAQ</h2>
           <div className="mt-4 space-y-4">
             {faq.map(({ q, a }) => (
-              <div key={q} className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-                <p className="font-semibold text-white">{q}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-400">{a}</p>
+              <div key={q} className="rounded-md border border-divider bg-surface p-5">
+                <p className="font-semibold text-foreground">{q}</p>
+                <p className="mt-2 text-sm leading-6 text-muted">{a}</p>
               </div>
             ))}
           </div>
@@ -67,11 +67,11 @@ function ContactCard({ title, href, label, desc, external }: { title: string; hr
     <a
       href={href}
       {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      className="rounded-md border border-white/[0.08] bg-[#080b12] p-5 transition hover:border-white/[0.14]"
+      className="rounded-md border border-divider bg-surface p-5 transition hover:border-outline"
     >
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{title}</p>
-      <p className="mt-2 text-sm font-semibold text-white">{label}</p>
-      <p className="mt-1 text-xs text-slate-500">{desc}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{title}</p>
+      <p className="mt-2 text-sm font-semibold text-foreground">{label}</p>
+      <p className="mt-1 text-xs text-subdued">{desc}</p>
     </a>
   );
 }

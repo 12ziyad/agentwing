@@ -41,27 +41,27 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard/receipts"
-          className="text-xs font-semibold text-slate-400 transition hover:text-white"
+          className="text-xs font-semibold text-muted transition hover:text-foreground"
         >
           ← Receipts
         </Link>
-        <span className="text-slate-600">/</span>
-        <p className="font-mono text-xs text-slate-400">{receipt.receiptId}</p>
+        <span className="text-subdued">/</span>
+        <p className="font-mono text-xs text-muted">{receipt.receiptId}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <span className={`rounded border px-3 py-1.5 text-sm font-semibold ${decisionClass[receipt.decision] ?? ""}`}>
           {receipt.decision}
         </span>
-        <span className={`text-sm font-semibold ${riskClass[receipt.risk] ?? "text-slate-300"}`}>
+        <span className={`text-sm font-semibold ${riskClass[receipt.risk] ?? "text-secondary"}`}>
           {receipt.risk} risk
         </span>
-        <span className="text-xs text-slate-500">{new Date(receipt.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-subdued">{new Date(receipt.createdAt).toLocaleString()}</span>
       </div>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Decision</p>
+        <div className="rounded-md border border-divider bg-surface p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Decision</p>
           <div className="mt-4 space-y-3">
             <Field label="Policy" value={receipt.policy} mono />
             <Field label="Decision" value={receipt.decision} />
@@ -70,8 +70,8 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
             {receipt.provider && <Field label="Provider" value={receipt.provider} />}
           </div>
         </div>
-        <div className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Action</p>
+        <div className="rounded-md border border-divider bg-surface p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Action</p>
           <div className="mt-4 space-y-3">
             <Field label="Action type" value={receipt.actionType} mono />
             {receipt.tool && <Field label="Tool" value={receipt.tool} mono />}
@@ -84,24 +84,24 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
       </section>
 
       {(receipt.stdout || receipt.stderr || receipt.exitCode !== undefined || receipt.durationMs !== undefined) && (
-        <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Sandbox result</p>
+        <section className="rounded-md border border-divider bg-surface p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Sandbox result</p>
           <div className="mt-4 space-y-3">
             {receipt.exitCode !== undefined && <Field label="Exit code" value={String(receipt.exitCode)} mono />}
             {receipt.durationMs !== undefined && <Field label="Duration" value={`${receipt.durationMs}ms`} />}
             {receipt.error && <Field label="Error" value={receipt.error.slice(0, 500)} />}
             {receipt.stdout && (
               <div>
-                <p className="text-xs font-medium uppercase tracking-[0.1em] text-slate-500">stdout</p>
-                <pre className="mt-2 max-h-48 overflow-y-auto rounded border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-5 text-slate-300">
+                <p className="text-xs font-medium uppercase tracking-[0.1em] text-subdued">stdout</p>
+                <pre className="mt-2 max-h-48 overflow-y-auto rounded border border-divider bg-background p-3 text-xs leading-5 text-secondary">
                   {receipt.stdout.slice(0, 2000)}
                 </pre>
               </div>
             )}
             {receipt.stderr && (
               <div>
-                <p className="text-xs font-medium uppercase tracking-[0.1em] text-slate-500">stderr</p>
-                <pre className="mt-2 max-h-48 overflow-y-auto rounded border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-5 text-amber-100">
+                <p className="text-xs font-medium uppercase tracking-[0.1em] text-subdued">stderr</p>
+                <pre className="mt-2 max-h-48 overflow-y-auto rounded border border-divider bg-background p-3 text-xs leading-5 text-amber-100">
                   {receipt.stderr.slice(0, 2000)}
                 </pre>
               </div>
@@ -111,9 +111,9 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
       )}
 
       {safeMetadata && Object.keys(safeMetadata).length > 0 && (
-        <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Metadata</p>
-          <pre className="mt-4 overflow-x-auto rounded border border-white/[0.08] bg-[#05070d] p-3 text-xs leading-5 text-slate-300">
+        <section className="rounded-md border border-divider bg-surface p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Metadata</p>
+          <pre className="mt-4 overflow-x-auto rounded border border-divider bg-background p-3 text-xs leading-5 text-secondary">
             {JSON.stringify(safeMetadata, null, 2).slice(0, 2000)}
           </pre>
         </section>
@@ -125,8 +125,8 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-slate-500">{label}</p>
-      <p className={mono ? "break-all font-mono text-xs text-cyan-100" : "text-sm text-slate-200"}>{value}</p>
+      <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-subdued">{label}</p>
+      <p className={mono ? "break-all font-mono text-xs text-brand-text" : "text-sm text-secondary"}>{value}</p>
     </div>
   );
 }

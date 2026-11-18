@@ -12,22 +12,22 @@ const posts = [
 
 export default function BlogPage() {
   return (
-    <div className="min-h-screen bg-[#05070d] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <PublicNav />
       <main className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Blog</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">AgentWing blog</h1>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">Blog</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">AgentWing blog</h1>
         <div className="mt-8 space-y-4">
           {posts.map((post) => (
             <Link
               key={post.slug}
               href={`/blog/${post.slug}`}
-              className="block rounded-md border border-white/[0.08] bg-[#080b12] p-6 transition hover:border-white/[0.14]"
+              className="block rounded-md border border-divider bg-surface p-6 transition hover:border-outline"
             >
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{post.meta}</p>
-              <p className="mt-2 text-xl font-semibold text-white">{post.title}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-400">{post.excerpt}</p>
-              <p className="mt-4 text-xs font-semibold text-cyan-200">Read →</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-subdued">{post.meta}</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">{post.title}</p>
+              <p className="mt-2 text-sm leading-6 text-muted">{post.excerpt}</p>
+              <p className="mt-4 text-xs font-semibold text-brand">Read →</p>
             </Link>
           ))}
         </div>

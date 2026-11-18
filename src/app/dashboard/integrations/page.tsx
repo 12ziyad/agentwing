@@ -145,15 +145,15 @@ export default function IntegrationsPage() {
   return (
     <div className="max-w-4xl space-y-8">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200">Integrations</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Integrate AgentWing with your agent</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          Use <span className="font-mono text-cyan-100">/api/v1/check-action</span> for lightweight decisions, or <span className="font-mono text-cyan-100">/api/v1/execute-action</span> to create a full action run with approval, sandbox, checkpoint, logs, and receipt state.
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">Integrations</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Integrate AgentWing with your agent</h1>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          Use <span className="font-mono text-brand-text">/api/v1/check-action</span> for lightweight decisions, or <span className="font-mono text-brand-text">/api/v1/execute-action</span> to create a full action run with approval, sandbox, checkpoint, logs, and receipt state.
         </p>
       </div>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">Control flow</h2>
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">Control flow</h2>
         <div className="mt-4 space-y-2">
           {[
             { step: "1", text: "Agent proposes an action: file read, shell command, network call, or other tool use." },
@@ -162,16 +162,16 @@ export default function IntegrationsPage() {
             { step: "4", text: "Response includes decision, risk, policy, feedback, receiptId, and nextStep." },
             { step: "5", text: "Runs show the selected guard: blocked, waiting approval, waiting sandbox, restore point required, external runner required, completed, or failed." },
           ].map(({ step, text }) => (
-            <div key={step} className="flex items-start gap-3 rounded border border-white/[0.06] bg-[#05070d] p-3">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded border border-cyan-300/20 bg-cyan-300/[0.08] font-mono text-xs text-cyan-100">{step}</span>
-              <span className="text-sm text-slate-300">{text}</span>
+            <div key={step} className="flex items-start gap-3 rounded border border-divider/70 bg-background p-3">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded border border-brand-outline bg-brand-surface font-mono text-xs text-brand-text">{step}</span>
+              <span className="text-sm text-secondary">{text}</span>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">Decision values</h2>
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">Decision values</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {[
             { d: "allow", cls: "text-emerald-200", desc: "Cleared. Proceed with execution." },
@@ -180,89 +180,89 @@ export default function IntegrationsPage() {
             { d: "sandbox_required", cls: "text-cyan-200", desc: "Route to connected E2B or your own sandbox. Do not execute locally without a sandbox." },
             { d: "restore_point_required", cls: "text-violet-200", desc: "Checkpoint current state before continuing." },
           ].map(({ d, cls, desc }) => (
-            <div key={d} className="rounded border border-white/[0.06] bg-[#05070d] p-3">
+            <div key={d} className="rounded border border-divider/70 bg-background p-3">
               <p className={`font-mono text-sm font-semibold ${cls}`}>{d}</p>
-              <p className="mt-1 text-xs text-slate-400">{desc}</p>
+              <p className="mt-1 text-xs text-muted">{desc}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">Response example</h2>
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">Response example</h2>
         <CodeBlock code={responseExample} />
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">Real local agent example</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          See <code className="font-mono text-cyan-100">examples/guarded-runner</code> for a deterministic agent loop using <code className="font-mono text-cyan-100">execute-action</code>.
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">Real local agent example</h2>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          See <code className="font-mono text-brand-text">examples/guarded-runner</code> for a deterministic agent loop using <code className="font-mono text-brand-text">execute-action</code>.
           The API key is loaded once. AgentWing creates a run before each action.
         </p>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
+        <p className="mt-2 text-sm leading-6 text-muted">
           If no sandbox is connected, sandbox_required actions must not execute locally.
         </p>
         <CodeBlock code={realAgentCommands} />
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">Sandbox routing behavior</h2>
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">Sandbox routing behavior</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <InfoBox title="BYOK E2B connected" body="sandbox_required actions can be routed to your connected E2B sandbox." />
           <InfoBox title="Own sandbox" body="Use the AgentWing decision to route action to the sandbox your agent already owns." />
           <InfoBox title="No sandbox connected" body="sandbox_required means do not execute locally. Connect E2B BYOK or use your own sandbox." />
         </div>
-        <p className="mt-4 text-xs leading-5 text-slate-500">
+        <p className="mt-4 text-xs leading-5 text-subdued">
           AgentWing does not replace sandbox providers. It is the runtime control layer that decides when to allow,
           block, require approval, require a restore point, or require a sandbox.
         </p>
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">cURL</h2>
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">cURL</h2>
         <CodeBlock code={curlExample} />
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">Managed lifecycle cURL</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          This creates a run visible at <code className="font-mono text-cyan-100">/dashboard/runs</code>. Sandbox-required actions execute only in E2B when BYOK is connected; otherwise they wait.
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">Managed lifecycle cURL</h2>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          This creates a run visible at <code className="font-mono text-brand-text">/dashboard/runs</code>. Sandbox-required actions execute only in E2B when BYOK is connected; otherwise they wait.
         </p>
         <CodeBlock code={executeCurlExample} />
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">JavaScript fetch</h2>
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">JavaScript fetch</h2>
         <CodeBlock code={fetchExample} />
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">Node.js typed wrapper</h2>
-        <p className="mb-4 text-xs text-slate-400">Use this as a small reusable helper.</p>
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">Node.js typed wrapper</h2>
+        <p className="mb-4 text-xs text-muted">Use this as a small reusable helper.</p>
         <CodeBlock code={nodeWrapperExample} />
       </section>
 
-      <section className="rounded-md border border-white/[0.08] bg-[#080b12] p-6">
-        <h2 className="text-base font-semibold text-white">Python</h2>
+      <section className="rounded-md border border-divider bg-surface p-6">
+        <h2 className="text-base font-semibold text-foreground">Python</h2>
         <CodeBlock code={pythonExample} />
       </section>
 
-      <div className="rounded border border-cyan-300/15 bg-cyan-300/[0.04] p-4 text-sm text-slate-300">
-        <span className="font-semibold text-cyan-200">SDK helper available.</span>{" "}
+      <div className="rounded border border-brand-outline bg-brand/5 p-4 text-sm text-secondary">
+        <span className="font-semibold text-brand">SDK helper available.</span>{" "}
         The TypeScript SDK exposes <code className="font-mono">checkAction</code>, <code className="font-mono">guardAction</code>, and <code className="font-mono">executeAction</code>. Use <code className="font-mono">executeAction</code> when you want the full run lifecycle.
         Follow{" "}
-        <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="text-cyan-200 underline">github.com/12ziyad</a>{" "}
+        <a href="https://github.com/12ziyad" target="_blank" rel="noopener noreferrer" className="text-brand underline">github.com/12ziyad</a>{" "}
         for updates.
       </div>
 
       <div className="flex flex-wrap gap-3 text-sm">
-        <Link href="/docs" className="rounded border border-white/[0.1] px-4 py-2 text-slate-300 transition hover:text-white">
+        <Link href="/docs" className="rounded border border-outline px-4 py-2 text-secondary transition hover:text-foreground">
           View full docs
         </Link>
-        <Link href="/dashboard/api-keys" className="rounded border border-white/[0.1] px-4 py-2 text-slate-300 transition hover:text-white">
+        <Link href="/dashboard/api-keys" className="rounded border border-outline px-4 py-2 text-secondary transition hover:text-foreground">
           Generate API key
         </Link>
-        <Link href="/dashboard/policies" className="rounded border border-white/[0.1] px-4 py-2 text-slate-300 transition hover:text-white">
+        <Link href="/dashboard/policies" className="rounded border border-outline px-4 py-2 text-secondary transition hover:text-foreground">
           Add policies
         </Link>
       </div>
@@ -272,16 +272,16 @@ export default function IntegrationsPage() {
 
 function InfoBox({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded border border-white/[0.06] bg-[#05070d] p-3">
-      <p className="text-sm font-semibold text-white">{title}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-400">{body}</p>
+    <div className="rounded border border-divider/70 bg-background p-3">
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-muted">{body}</p>
     </div>
   );
 }
 
 function CodeBlock({ code }: { code: string }) {
   return (
-    <pre className="mt-4 overflow-x-auto rounded border border-white/[0.08] bg-[#05070d] p-4 text-xs leading-6 text-slate-300">
+    <pre className="mt-4 overflow-x-auto rounded border border-divider bg-background p-4 text-xs leading-6 text-secondary">
       {code}
     </pre>
   );

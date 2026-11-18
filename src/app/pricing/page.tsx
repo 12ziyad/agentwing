@@ -82,15 +82,15 @@ const FAQ = [
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-[#05070d] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <PublicNav />
       <main className="mx-auto max-w-6xl px-5 py-14 sm:px-8 sm:py-16">
         <div className="mx-auto max-w-2xl text-center">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-300/70">Pricing</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl text-balance">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-brand">Pricing</p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl text-balance">
             Free while we&apos;re in beta.
           </h1>
-          <p className="mt-4 text-sm leading-6 text-slate-400 sm:text-base sm:leading-7">
+          <p className="mt-4 text-sm leading-6 text-muted sm:text-base sm:leading-7">
             Use the full hosted service today at no cost. Paid plans with higher limits come after the beta — they are
             shown here so you know where it&apos;s going.
           </p>
@@ -102,31 +102,31 @@ export default function PricingPage() {
               key={plan.name}
               className={`flex flex-col rounded-xl border p-6 ${
                 plan.highlight
-                  ? "border-cyan-300/30 bg-gradient-to-b from-cyan-300/[0.07] to-[#080b12] shadow-[0_0_60px_-20px] shadow-cyan-400/30"
-                  : "border-white/[0.08] bg-[#080b12]"
+                  ? "border-brand-outline bg-linear-to-b from-brand/10 to-surface"
+                  : "border-divider bg-surface"
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="text-lg font-semibold text-white">{plan.name}</p>
+                <p className="text-lg font-semibold text-foreground">{plan.name}</p>
                 <span
                   className={`rounded-full px-2.5 py-0.5 font-mono text-[10.5px] ${
                     plan.highlight
                       ? "bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/25"
-                      : "bg-white/[0.04] text-slate-400 ring-1 ring-white/[0.1]"
+                      : "bg-white/[0.04] text-muted ring-1 ring-white/[0.1]"
                   }`}
                 >
                   {plan.status}
                 </span>
               </div>
               <p className="mt-4 flex items-baseline gap-2">
-                <span className="text-4xl font-bold tracking-tight text-white">{plan.price}</span>
-                <span className="text-sm text-slate-500">{plan.cadence}</span>
+                <span className="text-4xl font-bold tracking-tight text-foreground">{plan.price}</span>
+                <span className="text-sm text-subdued">{plan.cadence}</span>
               </p>
-              <p className="mt-3 text-sm leading-6 text-slate-400">{plan.blurb}</p>
+              <p className="mt-3 text-sm leading-6 text-muted">{plan.blurb}</p>
               <ul className="mt-6 flex-1 space-y-2.5">
                 {plan.features.map((feature) => (
-                  <li key={feature} className="flex gap-2.5 text-[13px] leading-5 text-slate-300">
-                    <svg viewBox="0 0 16 16" className={`mt-0.5 size-4 shrink-0 ${plan.highlight ? "text-cyan-300" : "text-slate-500"}`} fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <li key={feature} className="flex gap-2.5 text-[13px] leading-5 text-secondary">
+                    <svg viewBox="0 0 16 16" className={`mt-0.5 size-4 shrink-0 ${plan.highlight ? "text-brand" : "text-subdued"}`} fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
                       <path d="M3.5 8.5l3 3 6-7" />
                     </svg>
                     {feature}
@@ -136,12 +136,12 @@ export default function PricingPage() {
               {plan.cta ? (
                 <a
                   href={plan.cta.href}
-                  className="mt-8 rounded-md bg-cyan-400 px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:bg-cyan-300"
+                  className="mt-8 rounded-md bg-brand px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:bg-brand"
                 >
                   {plan.cta.label}
                 </a>
               ) : (
-                <p className="mt-8 rounded-md border border-dashed border-white/[0.12] px-4 py-2.5 text-center text-sm text-slate-500">
+                <p className="mt-8 rounded-md border border-dashed border-outline px-4 py-2.5 text-center text-sm text-subdued">
                   Not on sale yet
                 </p>
               )}
@@ -149,31 +149,31 @@ export default function PricingPage() {
           ))}
         </div>
 
-        <div className="mt-4 rounded-xl border border-white/[0.08] bg-[#080b12] p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
+        <div className="mt-4 rounded-xl border border-divider bg-surface p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
           <div>
-            <p className="font-semibold text-white">Enterprise and self-hosting</p>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="font-semibold text-foreground">Enterprise and self-hosting</p>
+            <p className="mt-1 text-sm text-muted">
               Run AgentWing in your own infrastructure, custom limits, or a security review. Tell us what you need.
             </p>
           </div>
           <Link
             href="/contact"
-            className="mt-4 inline-block shrink-0 rounded-md border border-white/[0.14] px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-white/30 sm:mt-0"
+            className="mt-4 inline-block shrink-0 rounded-md border border-outline px-4 py-2 text-sm font-semibold text-secondary transition hover:border-white/30 sm:mt-0"
           >
             Contact us
           </Link>
         </div>
 
         <section className="mx-auto mt-20 max-w-3xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-white">Questions</h2>
-          <div className="mt-6 divide-y divide-white/[0.07] border-y border-white/[0.07]">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Questions</h2>
+          <div className="mt-6 divide-y divide-white/[0.07] border-y border-divider">
             {FAQ.map(([q, a]) => (
               <details key={q} className="group py-4">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-slate-100 [&::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
                   {q}
-                  <span className="font-mono text-slate-500 transition group-open:rotate-45">+</span>
+                  <span className="font-mono text-subdued transition group-open:rotate-45">+</span>
                 </summary>
-                <p className="mt-3 text-sm leading-6 text-slate-400">{a}</p>
+                <p className="mt-3 text-sm leading-6 text-muted">{a}</p>
               </details>
             ))}
           </div>

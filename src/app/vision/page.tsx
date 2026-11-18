@@ -2,18 +2,18 @@ import { PublicNav, PublicFooter } from "@/components/PublicLayout";
 
 export default function VisionPage() {
   return (
-    <div className="min-h-screen bg-[#05070d] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <PublicNav />
       <main className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">Vision</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">Vision</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
           Runtime control for the agent era
         </h1>
-        <p className="mt-4 text-base font-medium text-slate-300">
+        <p className="mt-4 text-base font-medium text-secondary">
           Agents were built to act. Production systems were built for humans to approve. AgentWing is the missing runtime control layer between autonomous agents and real execution.
         </p>
 
-        <div className="prose-custom mt-10 space-y-8 text-slate-300">
+        <div className="prose-custom mt-10 space-y-8 text-secondary">
           <Section title="How we got here">
             <p>
               Software development started with humans writing and reviewing every line. Then came CI/CD, which automated testing and deployment — but humans still authored every change. The diff was still readable.
@@ -67,11 +67,11 @@ export default function VisionPage() {
               Each of these components solves a different failure mode:
             </p>
             <ul className="mt-2 space-y-2 text-sm">
-              <li><span className="font-semibold text-white">Policy</span> — prevents unsafe actions from executing at all.</li>
-              <li><span className="font-semibold text-white">Sandbox routing</span> — lets risky actions run in isolation before touching production.</li>
-              <li><span className="font-semibold text-white">Restore points</span> — ensures recovery paths exist before irreversible mutations.</li>
-              <li><span className="font-semibold text-white">Feedback</span> — gives the agent context to re-plan rather than fail silently.</li>
-              <li><span className="font-semibold text-white">Receipts</span> — creates an audit trail that survives incidents and compliance reviews.</li>
+              <li><span className="font-semibold text-foreground">Policy</span> — prevents unsafe actions from executing at all.</li>
+              <li><span className="font-semibold text-foreground">Sandbox routing</span> — lets risky actions run in isolation before touching production.</li>
+              <li><span className="font-semibold text-foreground">Restore points</span> — ensures recovery paths exist before irreversible mutations.</li>
+              <li><span className="font-semibold text-foreground">Feedback</span> — gives the agent context to re-plan rather than fail silently.</li>
+              <li><span className="font-semibold text-foreground">Receipts</span> — creates an audit trail that survives incidents and compliance reviews.</li>
             </ul>
             <p>
               Together they form the control plane that production agent infrastructure needs.
@@ -85,7 +85,7 @@ export default function VisionPage() {
             <p>
               The goal is agents that are both autonomous and governed. Not constrained by static rules, but audited, sandboxed, and correctable at runtime.
             </p>
-            <p className="text-slate-400">
+            <p className="text-muted">
               — Ziyad, founder of GPMai Labs
             </p>
           </Section>
@@ -99,7 +99,7 @@ export default function VisionPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="text-lg font-semibold text-white">{title}</h2>
+      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
       <div className="mt-3 space-y-3 text-sm leading-7">{children}</div>
     </div>
   );
