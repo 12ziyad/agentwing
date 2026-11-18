@@ -23,8 +23,8 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-space-grotesk), var(--font-geist-sans), system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), var(--font-geist-mono), "Courier New", monospace;
+  --font-sans: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "Courier New", monospace;
 }
 
 body {
