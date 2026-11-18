@@ -68,7 +68,7 @@ export function DashboardShell({ children, auth }: { children: React.ReactNode; 
   const maskedUser = user?.email ? "Signed in" : "Admin";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <main className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
         <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 overflow-y-auto border-r border-divider bg-surface lg:block">
           <div className="border-b border-divider px-5 py-5">
@@ -83,7 +83,7 @@ export function DashboardShell({ children, auth }: { children: React.ReactNode; 
           </div>
           <div className="px-2 py-3"><DashboardNav /></div>
         </aside>
-        <div className="min-w-0 flex-1">
+        <section className="min-w-0 flex-1">
           <header className="sticky top-0 z-20 border-b border-divider bg-background/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
@@ -139,9 +139,9 @@ export function DashboardShell({ children, auth }: { children: React.ReactNode; 
               </div>
             </div>
           </header>
-          <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
-        </div>
+          <div className="px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
