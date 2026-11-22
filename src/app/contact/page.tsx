@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PublicNav, PublicFooter } from "@/components/PublicLayout";
 
 const contacts = [
@@ -14,7 +15,10 @@ export default function ContactPage() {
       <main className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">Contact</p>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">Contact</h1>
-        <p className="mt-4 text-base text-muted">GPMai Labs — the company behind AgentWing.</p>
+        <p className="mt-4 text-base text-muted">
+          <Link href="/about" className="text-brand underline underline-offset-4">GPMai Labs</Link>
+          {" builds and operates AgentWing."}
+        </p>
 
         <div className="mt-8 space-y-3">
           {contacts.map(({ label, email, desc }) => (
