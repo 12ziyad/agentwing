@@ -10,10 +10,10 @@ vi.mock("@/lib/auth", () => ({ getDashboardAuth: vi.fn() }));
 
 const origin = "https://agentwing.gpmai.dev";
 
-function submit(fields: Record<string, string>, requestOrigin = origin) {
+function submit(fields: Record<string, string>, requestOrigin = origin, fetchSite?: string) {
   return POST(new Request(`${origin}/api/auth/accept-terms`, {
     method: "POST",
-    headers: { origin: requestOrigin },
+    headers: { origin: requestOrigin, ...(fetchSite ? { "sec-fetch-site": fetchSite } : {}) },
     body: new URLSearchParams(fields),
   }));
 }
@@ -46,6 +46,11 @@ describe("dashboard terms acceptance", () => {
     const response = await submit({ accepted: "yes", version: ACTIVE_TERMS_VERSION }, "https://gpmai.dev");
     expect(response.status).toBe(403);
     expect(acceptCurrentTerms).not.toHaveBeenCalled();
+  });
+
+  it("uses browser fetch metadata when the proxy rewrites the URL", async () => {
+    const response = await submit({ accepted: "yes", version: ACTIVE_TERMS_VERSION }, "https://original.example", "same-origin");
+    expect(response.headers.get("location")).toBe("/dashboard");
   });
 
   it("returns to the prompt when saving fails", async () => {

@@ -7,7 +7,11 @@ function redirect(location: string) {
 }
 
 export async function POST(request: Request) {
-  if (request.headers.get("origin") !== new URL(request.url).origin) {
+  const fetchSite = request.headers.get("sec-fetch-site");
+  const sameOrigin = fetchSite
+    ? fetchSite === "same-origin"
+    : request.headers.get("origin") === new URL(request.url).origin;
+  if (!sameOrigin) {
     return new Response(null, { status: 403 });
   }
 
