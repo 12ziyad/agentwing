@@ -4,7 +4,7 @@ import { PublicFooter, PublicNav } from "@/components/PublicLayout";
 
 export const metadata: Metadata = {
   title: "About GPMai Labs | AgentWing",
-  description: "Meet the founder of GPMai Labs, the company behind AgentWing.",
+  description: "Meet the founder of GPMai Labs, try the AgentWing public beta, and see what is planned next.",
   alternates: { canonical: "/about" },
 };
 
@@ -43,16 +43,30 @@ export default function AboutPage() {
         </section>
 
         <section aria-labelledby="agentwing" className="mt-10">
-          <h2 id="agentwing" className="text-2xl font-semibold tracking-tight">AgentWing</h2>
+          <h2 id="agentwing" className="text-2xl font-semibold tracking-tight">AgentWing public beta</h2>
           <p className="mt-3 leading-7 text-secondary">
-            Try a policy check in the public playground or see how to integrate AgentWing
-            with your agent in the documentation.
+            Developers can try policy checks in the public playground and connect their own
+            agents using the API, SDK, or MCP. The hosted beta is free and the source is
+            available under Apache 2.0.
           </p>
           <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
             <li><Link href="/playground" className="text-brand underline underline-offset-4">Try the playground</Link></li>
             <li><Link href="/docs" className="text-brand underline underline-offset-4">Read the documentation</Link></li>
             <li><a href="https://gpmai.dev" className="text-brand underline underline-offset-4">GPMai website</a></li>
           </ul>
+        </section>
+
+        <section aria-labelledby="roadmap" className="mt-10">
+          <h2 id="roadmap" className="text-2xl font-semibold tracking-tight">Business model and roadmap</h2>
+          <p className="mt-3 leading-7 text-secondary">
+            After the beta, we plan to offer paid Pro and Team subscriptions for the hosted
+            service. Pro is designed for individual developers who need higher usage limits
+            and longer audit history. Team is designed for shared projects that need role-based
+            approvals and audit exports.
+          </p>
+          <Link href="/pricing" className="mt-4 inline-block text-sm text-brand underline underline-offset-4">
+            See the beta and planned subscriptions
+          </Link>
         </section>
       </main>
       <PublicFooter />

@@ -1,10 +1,12 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
+import { hasAcceptedCurrentTerms } from "@/lib/agentwingStore";
 import { getDashboardAuthFromCookieHeader } from "@/lib/auth";
 import type { DashboardAuthContext } from "@/lib/agentwingTypes";
 
 /**
- * The signed-in dashboard user, or a redirect to sign-in.
+ * The signed-in dashboard user, or a redirect to sign-in or terms acceptance.
  *
  * Every dashboard page needs the same three lines — read cookies, resolve the
  * session, bail if there isn't one — and each page writing them itself is how
@@ -15,7 +17,7 @@ import type { DashboardAuthContext } from "@/lib/agentwingTypes";
  * This returns a non-optional context, so a page cannot accidentally query
  * without a workspace.
  */
-export async function requireDashboardSession(): Promise<DashboardAuthContext> {
+export const requireSignedInDashboardUser = cache(async (): Promise<DashboardAuthContext> => {
   const cookieStore = await cookies();
   const cookieHeader = cookieStore
     .getAll()
@@ -26,4 +28,10 @@ export async function requireDashboardSession(): Promise<DashboardAuthContext> {
   if (!auth) redirect("/api/auth/signin/google");
 
   return auth;
-}
+});
+
+export const requireDashboardSession = cache(async (): Promise<DashboardAuthContext> => {
+  const auth = await requireSignedInDashboardUser();
+  if (!(await hasAcceptedCurrentTerms(auth.user.userId))) redirect("/accept-terms");
+  return auth;
+});

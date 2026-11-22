@@ -11,7 +11,7 @@ export default function TermsPage() {
 
         <div className="mt-10 space-y-8 text-sm leading-7 text-secondary">
           <Section title="1. Acceptance">
-            <p>By using AgentWing you agree to these Terms. If you do not agree, do not use the service.</p>
+            <p>Review and accept these Terms before entering the AgentWing dashboard. These Terms also govern your use of the AgentWing service.</p>
           </Section>
 
           <Section title="2. Service description">

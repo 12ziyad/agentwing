@@ -18,6 +18,7 @@ export default function PrivacyPage() {
             <ul className="mt-2 space-y-1 text-muted">
               {[
                 "Google profile basics — email, name, avatar — collected at sign-in via Google OAuth",
+                "Terms of Service acceptance records, including the version and acceptance time",
                 "Workspace and project metadata you create",
                 "API key hashes — the full key is never stored after creation",
                 "Encrypted BYOK sandbox provider credentials (AES-GCM, server-side only)",

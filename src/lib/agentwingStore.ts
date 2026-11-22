@@ -4,6 +4,7 @@ import { redactValue } from "./redact";
 import { DEFAULT_ROLE, isRole } from "./rbac";
 import { appendReceiptToChain } from "./receiptChainStore";
 import { emitEvent } from "./webhookStore";
+import { ACTIVE_TERMS_VERSION } from "./terms";
 import type {
   ActionReceipt,
   AgentAction,
@@ -750,6 +751,22 @@ async function getDb(): Promise<AgentWingD1Database> {
     );
   }
   return db;
+}
+
+export async function hasAcceptedCurrentTerms(userId: string) {
+  const db = await getDb();
+  const record = await db.prepare(
+    "SELECT 1 FROM terms_acceptances WHERE user_id = ? AND terms_version = ?",
+  ).bind(userId, ACTIVE_TERMS_VERSION).first();
+  return record !== null;
+}
+
+export async function acceptCurrentTerms(userId: string) {
+  const db = await getDb();
+  const result = await db.prepare(
+    "INSERT INTO terms_acceptances (user_id, terms_version) VALUES (?, ?) ON CONFLICT (user_id, terms_version) DO NOTHING",
+  ).bind(userId, ACTIVE_TERMS_VERSION).run();
+  if (!result.success) throw new Error("Unable to record terms acceptance.");
 }
 
 async function getD1TableColumns(
